@@ -7,12 +7,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Khmer:wght@400;600&display=swap">
 <style>
   :root {
-    --bg: #e9edf1; --card: rgba(255,255,255,0.82); --line: #d5dae1; --text: #1f2933; --mute: #6b7682;
+    --bg: #e9edf1; --solid: #fafbfc; --card: rgba(255,255,255,0.82); --line: #d5dae1; --text: #1f2933; --mute: #6b7682;
     --hover: rgba(31,41,51,0.06); --chip: rgba(255,255,255,0.7); --acc: #e2578f; --acc-soft: #fde6ef; --acc-text: #c23672;
     --shadow: 0 14px 40px rgba(24,34,54,0.16); --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   html.dark {
-    --bg: #1b1f24; --card: rgba(32,37,44,0.84); --line: #3b434e; --text: #eef1f4; --mute: #9aa5b1;
+    --bg: #1b1f24; --solid: #21262d; --card: rgba(32,37,44,0.84); --line: #3b434e; --text: #eef1f4; --mute: #9aa5b1;
     --hover: rgba(255,255,255,0.08); --chip: rgba(255,255,255,0.05); --acc-soft: rgba(226,87,143,0.2); --acc-text: #ff9cc3;
     --shadow: 0 14px 40px rgba(0,0,0,0.45);
   }
@@ -49,7 +49,7 @@
   html.side #bar > * { animation: rise 0.45s var(--ease) both; animation-delay: calc(var(--i, 0) * 24ms + 70ms); }
   @keyframes rise { from { opacity: 0; transform: translateX(-12px); } }
   #bar > * { flex-shrink: 0; }
-  #bar .head { height: 38px; padding-left: 48px; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; }
+  #bar .head { position: sticky; top: 0; z-index: 1; height: 62px; box-sizing: border-box; margin: -12px -12px 0; padding: 0 12px 0 60px; background: var(--solid); border-radius: 18px 18px 0 0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; }
   #bar .head .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 0 4px var(--acc-soft); }
   #bar .grp { margin: 12px 6px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute); }
   #bar .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
@@ -64,6 +64,13 @@
   #cats.open { max-height: 260px; opacity: 1; }
   #cats button { font-size: 12px; padding: 7px 10px; color: var(--mute); }
   #cats button.on { background: var(--acc-soft); color: var(--acc-text); font-weight: 600; }
+  #bar label.col { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-radius: 10px; font-size: 13px; cursor: pointer; transition: background-color 0.15s; }
+  #bar label.col:hover { background: var(--hover); }
+  #bar input[type=color] { flex: none; width: 34px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: none; cursor: pointer; transition: transform 0.15s var(--ease); }
+  #bar input[type=color]:hover { transform: scale(1.12); }
+  #bar input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+  #bar input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
+  #bar input[type=color]::-moz-color-swatch { border: none; border-radius: 5px; }
   @media (min-width: 700px) {
     html.side #view { left: 264px; }
     html.side #hint { left: 276px; }
@@ -123,6 +130,11 @@
   </div>
   <button id="tList" class="sw">Size list</button>
   <button id="tPrice" class="sw">Price list</button>
+  <div class="grp" id="gCol">Colors (preview)</div>
+  <label class="col"><span id="lWall">Walls</span><input type="color" id="cWall" autocomplete="off"></label>
+  <label class="col"><span id="lPost">Pillars</span><input type="color" id="cPost" autocomplete="off"></label>
+  <label class="col"><span id="lBeam">Beams</span><input type="color" id="cBeam" autocomplete="off"></label>
+  <button id="cReset">Reset colors</button>
   <div class="grp" id="gSet">Settings</div>
   <button id="tLang">ភាសាខ្មែរ</button>
   <button id="tTheme" class="sw">Dark mode</button>
@@ -182,6 +194,9 @@
     if (!mats[c]) mats[c] = new THREE.MeshLambertMaterial({ color: c });
     return mats[c];
   }
+  var wallMat = new THREE.MeshLambertMaterial({ color: C.pink });
+  var postMat = new THREE.MeshLambertMaterial({ color: C.post });
+  var beamMat = new THREE.MeshLambertMaterial({ color: C.beam });
   var lightMat = new THREE.MeshBasicMaterial({ color: C.light });
   var screenMat = new THREE.MeshBasicMaterial({ color: C.screen });
   var ledMat = new THREE.MeshBasicMaterial({ color: 0xff3fa4 });
@@ -315,10 +330,10 @@
 
     function wallX(parent, x0, y0, o) {
       var T = 0.1;
-      box(parent, x0, y0, zb, o.x0, T, H, C.pink);
-      box(parent, x0 + o.x1, y0, zb, SEG - o.x1, T, H, C.pink);
-      box(parent, x0 + o.x0, y0, zb + o.z1, o.x1 - o.x0, T, H - o.z1, C.pink);
-      box(parent, x0 + o.x0, y0, zb, o.x1 - o.x0, T, o.z0, C.pink);
+      box(parent, x0, y0, zb, o.x0, T, H, wallMat);
+      box(parent, x0 + o.x1, y0, zb, SEG - o.x1, T, H, wallMat);
+      box(parent, x0 + o.x0, y0, zb + o.z1, o.x1 - o.x0, T, H - o.z1, wallMat);
+      box(parent, x0 + o.x0, y0, zb, o.x1 - o.x0, T, o.z0, wallMat);
     }
     // Sliding window: black frame, two panes, the right pane slides over the left one
     function slidingWindow(parent, ox, yc, oz) {
@@ -367,10 +382,10 @@
     tiled(room, 0, 0, 0.098, L + 0.2, W + 0.2, 0.002, '#e2d8c4', '#96918a', 0.6, L + 0.2, W + 0.2);
 
     // 6 posts and the top beams
-    [0, L / 2, L].forEach(function (x) { [0, W].forEach(function (y) { box(room, x, y, zb, 0.2, 0.2, H, C.post); }); });
-    box(roof, 0, 0, zt, L + 0.2, 0.2, 0.3, C.beam);
-    box(roof, 0, W, zt, L + 0.2, 0.2, 0.3, C.beam);
-    [0, L / 2, L].forEach(function (x) { box(roof, x, 0.2, zt, 0.2, W - 0.2, 0.3, C.beam); });
+    [0, L / 2, L].forEach(function (x) { [0, W].forEach(function (y) { box(room, x, y, zb, 0.2, 0.2, H, postMat); }); });
+    box(roof, 0, 0, zt, L + 0.2, 0.2, 0.3, beamMat);
+    box(roof, 0, W, zt, L + 0.2, 0.2, 0.3, beamMat);
+    [0, L / 2, L].forEach(function (x) { box(roof, x, 0.2, zt, 0.2, W - 0.2, 0.3, beamMat); });
 
     // Stepped ceiling: flat base, a dropped frame, LED strips on the frame edges, spot lights
     var zc = zt - 0.1, zr = zc - 0.1, zl = zc - 0.03;
@@ -409,8 +424,8 @@
     ground.position.set(cx, -0.001, -cy);
 
     // Walls: sides, back with 2 windows, front with a window (left) and the door (right)
-    box(room, 0.05, 0.2, zb, 0.1, W - 0.2, H, C.pink);
-    box(room, L + 0.05, 0.2, zb, 0.1, W - 0.2, H, C.pink);
+    box(room, 0.05, 0.2, zb, 0.1, W - 0.2, H, wallMat);
+    box(room, L + 0.05, 0.2, zb, 0.1, W - 0.2, H, wallMat);
     wallX(room, 0.2, W + 0.05, WIN);
     wallX(room, X2, W + 0.05, WIN);
     slidingWindow(room, 0.2 + WIN.x0, W + 0.1, zb + WIN.z0);
@@ -739,6 +754,16 @@
   function setFront(v) { front.visible = v; sw(bFront, v, S('Front wall', 'ជញ្ជាំងមុខ')); }
   function setSpin(v) { controls.autoRotate = v; sw(bSpin, v, S('360 spin', 'បង្វិល 360°')); }
   function setDoor(v) { doorOpen = v; sw(bDoor, v, S('Door open', 'បើកទ្វារ')); }
+  // Color preview for walls, pillars and beams. Nothing is saved: a page reload gives the first colors again.
+  var COLS = [['cWall', wallMat, C.pink], ['cPost', postMat, C.post], ['cBeam', beamMat, C.beam]];
+  function resetColors() {
+    COLS.forEach(function (c) { c[1].color.set(c[2]); el(c[0]).value = '#' + c[1].color.getHexString(); });
+  }
+  COLS.forEach(function (c) {
+    el(c[0]).addEventListener('input', function () { c[1].color.set(this.value); });
+  });
+  el('cReset').onclick = resetColors;
+  resetColors();
   var bTheme = el('tTheme');
   function themeText() { sw(bTheme, dark, S('Dark mode', 'របៀបងងឹត')); }
   function setTheme(v) {
@@ -1018,6 +1043,11 @@
     el('gRoom').textContent = S('Room', 'បន្ទប់');
     el('gSize').textContent = S('Sizes and prices', 'ទំហំ និងតម្លៃ');
     el('gSet').textContent = S('Settings', 'ការកំណត់');
+    el('gCol').textContent = S('Colors (preview)', 'ពណ៌ (សាកមើល)');
+    el('lWall').textContent = S('Walls', 'ជញ្ជាំង');
+    el('lPost').textContent = S('Pillars', 'សសរ');
+    el('lBeam').textContent = S('Beams', 'ធ្នឹម');
+    el('cReset').textContent = S('Reset colors', 'ត្រឡប់ទៅពណ៌ដើម');
     sideText();
     el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan to turn it on or off. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ ចុចលើកង្ហារ ដើម្បីបើក ឬបិទ។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
     Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
