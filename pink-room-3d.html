@@ -10,13 +10,21 @@
   #view { position: absolute; inset: 0; }
   body.km, body.km button { font-family: 'Noto Serif Khmer', 'Khmer OS', serif; }
   body.km button { line-height: 1.5; }
-  #bar { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+  #bar { position: absolute; left: 0; top: 0; bottom: 0; width: 200px; box-sizing: border-box; padding: 50px 10px 14px; display: none; flex-direction: column; gap: 6px; overflow-y: auto; background: rgba(255,255,255,0.95); border-right: 1px solid #c3c9d1; z-index: 2; }
+  html.side #bar { display: flex; }
+  #bar button { width: 100%; text-align: left; flex-shrink: 0; }
+  #bar .grp { margin: 8px 2px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7682; flex-shrink: 0; }
+  #bar .grp:first-child { margin-top: 0; }
+  #tSide { position: absolute; left: 10px; top: 10px; z-index: 3; }
+  @media (min-width: 700px) {
+    html.side #view { left: 200px; }
+    html.side #hint { left: 212px; }
+  }
   button { font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 8px; border: 1px solid #c3c9d1; background: #ffffff; color: #1f2933; cursor: pointer; pointer-events: auto; }
   button:hover { background: #f3f5f7; }
   button.on, button.on:hover { background: #1f2933; color: #ffffff; border-color: #1f2933; }
-  #cats { flex-basis: 100%; display: none; flex-wrap: wrap; gap: 6px; }
-  #bar .gap { width: 6px; }
-  .panel { position: absolute; right: 10px; top: 76px; width: 310px; max-width: calc(100% - 20px); max-height: calc(100% - 120px); overflow-y: auto; display: none; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.95); border: 1px solid #c3c9d1; color: #1f2933; font-size: 13px; box-sizing: border-box; }
+  #cats { display: none; flex-direction: column; gap: 6px; padding-left: 12px; flex-shrink: 0; }
+  .panel { position: absolute; right: 10px; top: 10px; width: 310px; max-width: calc(100% - 20px); max-height: calc(100% - 50px); z-index: 1; overflow-y: auto; display: none; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.95); border: 1px solid #c3c9d1; color: #1f2933; font-size: 13px; box-sizing: border-box; }
   .panel h3 { margin: 10px 0 4px; font-size: 13px; font-weight: 600; }
   .panel h3:first-child { margin-top: 0; }
   .panel table { width: 100%; border-collapse: collapse; }
@@ -37,6 +45,8 @@
   html.dark button { background: #2a3038; color: #eef1f4; border-color: #46505c; }
   html.dark button:hover { background: #343b45; }
   html.dark button.on, html.dark button.on:hover { background: #eef1f4; color: #1b1f24; border-color: #eef1f4; }
+  html.dark #bar { background: rgba(34,39,46,0.95); border-color: #46505c; }
+  html.dark #bar .grp { color: #9aa5b1; }
   html.dark .panel { background: rgba(34,39,46,0.95); border-color: #46505c; color: #eef1f4; }
   html.dark #hint { color: #b6c0ca; }
   html.dark #err { color: #eef1f4; }
@@ -44,25 +54,23 @@
 </head>
 <body>
 <div id="view"></div>
+<button id="tSide">☰ Menu</button>
 <div id="bar">
+  <div class="grp" id="gView">Views</div>
   <button id="vOut">Outside view</button>
   <button id="vBack">Back view</button>
   <button id="vIn">Inside view</button>
   <button id="vCeil">Ceiling view</button>
   <button id="vTop">Top view</button>
   <button id="tSpin">360 spin: off</button>
-  <span class="gap"></span>
+  <div class="grp" id="gRoom">Room</div>
   <button id="tRoof">Show roof</button>
   <button id="tFront">Hide front wall</button>
   <button id="tDoor">Open door</button>
   <button id="tCurt">Open curtains</button>
   <button id="tLight">Lights: color play</button>
-  <span class="gap"></span>
+  <div class="grp" id="gSize">Sizes and prices</div>
   <button id="tSizes">Show sizes</button>
-  <button id="tList">Size list</button>
-  <button id="tPrice">Price list</button>
-  <button id="tLang">ភាសាខ្មែរ</button>
-  <button id="tTheme">Dark mode</button>
   <div id="cats">
     <button data-c="all" class="on">All sizes</button>
     <button data-c="room">Room</button>
@@ -70,6 +78,11 @@
     <button data-c="furn">Furniture</button>
     <button data-c="other">Tiles, ceiling, air conditioner</button>
   </div>
+  <button id="tList">Size list</button>
+  <button id="tPrice">Price list</button>
+  <div class="grp" id="gSet">Settings</div>
+  <button id="tLang">ភាសាខ្មែរ</button>
+  <button id="tTheme">Dark mode</button>
 </div>
 <div id="sizes" class="panel"></div>
 <div id="prices" class="panel"></div>
@@ -954,6 +967,11 @@
     el('vCeil').textContent = S('Ceiling view', 'មើលពិដាន');
     el('vTop').textContent = S('Top view', 'មើលពីលើ');
     el('tLang').textContent = S('ភាសាខ្មែរ', 'English');
+    el('gView').textContent = S('Views', 'ទិដ្ឋភាព');
+    el('gRoom').textContent = S('Room', 'បន្ទប់');
+    el('gSize').textContent = S('Sizes and prices', 'ទំហំ និងតម្លៃ');
+    el('gSet').textContent = S('Settings', 'ការកំណត់');
+    sideText();
     el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan to turn it on or off. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ ចុចលើកង្ហារ ដើម្បីបើក ឬបិទ។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
     Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
       var c = CATS[b.getAttribute('data-c')];
@@ -1050,6 +1068,23 @@
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', fit);
+
+  // Sidebar with all the buttons: one button hides and shows it
+  var sideOn = window.innerWidth >= 700;
+  try { var savedSide = localStorage.getItem('roomSide'); if (savedSide) sideOn = savedSide === 'on'; } catch (e) {}
+  function sideText() { el('tSide').textContent = sideOn ? S('✕ Hide menu', '✕ លាក់ម៉ឺនុយ') : S('☰ Menu', '☰ ម៉ឺនុយ'); }
+  function setSide(v) {
+    sideOn = v;
+    document.documentElement.classList.toggle('side', v);
+    sideText();
+    fit();
+  }
+  el('tSide').onclick = function () {
+    setSide(!sideOn);
+    try { localStorage.setItem('roomSide', sideOn ? 'on' : 'off'); } catch (e) {}
+  };
+  document.documentElement.classList.toggle('side', sideOn);
+  sideText();
 
   build();
   fit();
