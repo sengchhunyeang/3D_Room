@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pink room 3D view</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Khmer:wght@400;600&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e9edf1; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view { position: absolute; inset: 0; }
+  body.km, body.km button { font-family: 'Noto Serif Khmer', 'Khmer OS', serif; }
+  body.km button { line-height: 1.5; }
+  #bar { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+  button { font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 8px; border: 1px solid #c3c9d1; background: #ffffff; color: #1f2933; cursor: pointer; pointer-events: auto; }
+  button:hover { background: #f3f5f7; }
+  button.on, button.on:hover { background: #1f2933; color: #ffffff; border-color: #1f2933; }
+  #cats { flex-basis: 100%; display: none; flex-wrap: wrap; gap: 6px; }
+  #bar .gap { width: 6px; }
+  .panel { position: absolute; right: 10px; top: 76px; width: 310px; max-width: calc(100% - 20px); max-height: calc(100% - 120px); overflow-y: auto; display: none; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.95); border: 1px solid #c3c9d1; color: #1f2933; font-size: 13px; box-sizing: border-box; }
+  .panel h3 { margin: 10px 0 4px; font-size: 13px; font-weight: 600; }
+  .panel h3:first-child { margin-top: 0; }
+  .panel table { width: 100%; border-collapse: collapse; }
+  .panel td { padding: 3px 0; vertical-align: top; border-top: 1px solid rgba(128,128,128,0.25); }
+  .panel td:last-child { text-align: right; white-space: nowrap; padding-left: 10px; }
+  #prices { width: 440px; }
+  #prices td { padding: 3px 4px 3px 0; }
+  #prices th { text-align: left; font-weight: 600; font-size: 12px; padding: 2px 4px 4px 0; }
+  #prices th.r, #prices td.r { text-align: right; white-space: nowrap; }
+  #prices input { width: 82px; font: inherit; font-size: 12px; padding: 2px 4px; text-align: right; border: 1px solid #c3c9d1; border-radius: 6px; background: transparent; color: inherit; }
+  #prices .est { font-size: 11px; opacity: 0.7; }
+  #prices .sum td { font-weight: 600; border-top: 2px solid currentColor; padding-top: 6px; }
+  #prices p { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+
+  #hint { position: absolute; left: 12px; bottom: 10px; right: 12px; font-size: 12px; color: #44505c; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #err { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #1f2933; }
+  @media (prefers-color-scheme: dark) {
+    html, body { background: #1b1f24; }
+    button { background: #2a3038; color: #eef1f4; border-color: #46505c; }
+    button:hover { background: #343b45; }
+    button.on, button.on:hover { background: #eef1f4; color: #1b1f24; border-color: #eef1f4; }
+    .panel { background: rgba(34,39,46,0.95); border-color: #46505c; color: #eef1f4; }
+    #hint { color: #b6c0ca; }
+    #err { color: #eef1f4; }
+  }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="bar">
+  <button id="vOut">Outside view</button>
+  <button id="vBack">Back view</button>
+  <button id="vIn">Inside view</button>
+  <button id="vCeil">Ceiling view</button>
+  <button id="vTop">Top view</button>
+  <button id="tSpin">360 spin: off</button>
+  <span class="gap"></span>
+  <button id="tRoof">Show roof</button>
+  <button id="tFront">Hide front wall</button>
+  <button id="tDoor">Open door</button>
+  <button id="tCurt">Open curtains</button>
+  <button id="tLight">Lights: color play</button>
+  <span class="gap"></span>
+  <button id="tSizes">Show sizes</button>
+  <button id="tList">Size list</button>
+  <button id="tPrice">Price list</button>
+  <button id="tLang">ភាសាខ្មែរ</button>
+  <div id="cats">
+    <button data-c="all" class="on">All sizes</button>
+    <button data-c="room">Room</button>
+    <button data-c="open">Windows and door</button>
+    <button data-c="furn">Furniture</button>
+    <button data-c="other">Tiles, ceiling, air conditioner</button>
+  </div>
+</div>
+<div id="sizes" class="panel"></div>
+<div id="prices" class="panel"></div>
+<div id="hint">Click the door, a curtain, or a window pane to open it. Drag to rotate. Scroll or pinch to zoom.</div>
+<div id="err">The 3D view could not load. Check your internet connection and reload the page.</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  if (!window.THREE || !THREE.OrbitControls) { document.getElementById('err').style.display = 'flex'; return; }
+
+  var holder = document.getElementById('view');
+  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(dark ? 0x1b1f24 : 0xe9edf1);
+  var camera = new THREE.PerspectiveCamera(50, 1, 0.05, 300);
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  holder.appendChild(renderer.domElement);
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.1;
+  controls.autoRotateSpeed = 1.5;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f96, 0.85));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.55);
+  sun.position.set(6, 10, 8);
+  scene.add(sun);
+  var sun2 = new THREE.DirectionalLight(0xffffff, 0.25);
+  sun2.position.set(-6, 6, -8);
+  scene.add(sun2);
+  var lampL = new THREE.PointLight(0xfff1c4, 0.2, 8);
+  var lampR = new THREE.PointLight(0xfff1c4, 0.2, 8);
+  var ledLight = new THREE.PointLight(0xff3fa4, 0.4, 7);
+  scene.add(lampL); scene.add(lampR); scene.add(ledLight);
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshLambertMaterial({ color: dark ? 0x2a2f36 : 0xcfd5da }));
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // Language: English or Khmer (Noto Serif Khmer)
+  var lang = 'en';
+  function S(en, km) { return lang === 'km' ? km : en; }
+
+  var C = {
+    pink: 0xf4aac3, post: 0x87ceeb, beam: 0x3c6eaa, white: 0xf5f5f5, wood: 0xaa7d50, door: 0x8c5f37,
+    sheet: 0xfaf8f0, blanket: 0xd76e96, black: 0x1e1e22, screen: 0x468cdc, grey: 0x787a80,
+    lgrey: 0xcdd0d4, red: 0xd92b2b, curt: 0xf3ead8, curt2: 0xe2d6bd, fan: 0x373a3e, chair: 0x5a5f69, light: 0xfff4be
+  };
+  var mats = {};
+  function mat(c) {
+    if (!mats[c]) mats[c] = new THREE.MeshLambertMaterial({ color: c });
+    return mats[c];
+  }
+  var lightMat = new THREE.MeshBasicMaterial({ color: C.light });
+  var screenMat = new THREE.MeshBasicMaterial({ color: C.screen });
+  var ledMat = new THREE.MeshBasicMaterial({ color: 0xff3fa4 });
+  var rgbA = new THREE.MeshBasicMaterial({ color: 0x00e5ff }), rgbB = new THREE.MeshBasicMaterial({ color: 0xff2bd6 });
+  var ceilMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x6a6a6a });
+  var edgeMat = new THREE.LineBasicMaterial({ color: 0xa9b0b7 });
+  // One-way glass: black from outside, clear from inside
+  var glassOut = new THREE.MeshLambertMaterial({ color: 0x0c0e11 });
+  var glassIn = new THREE.MeshBasicMaterial({ color: 0x30404c, transparent: true, opacity: 0.15, depthWrite: false });
+
+  var canvases = {};
+  function tileCanvas(tile, grout) {
+    var k = tile + grout;
+    if (!canvases[k]) {
+      var cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      var g = cv.getContext('2d');
+      g.fillStyle = grout; g.fillRect(0, 0, 64, 64);
+      g.fillStyle = tile; g.fillRect(2, 2, 62, 62);
+      canvases[k] = cv;
+    }
+    return canvases[k];
+  }
+
+  // Room size: post center to post center (L, W) and wall height (H), in meters.
+  var DEF = { L: 5.0, W: 2.5, H: 3.5 };
+  var LIM = { L: [4.0, 10.0], W: [2.5, 6.0], H: [3.0, 5.0] };
+  var P = { L: DEF.L, W: DEF.W, H: DEF.H };
+
+  var world = null, room = null, roof = null, front = null, trash = [];
+  var doorPivot = null, doorParts = [], doorOpen = false, doorAngle = 0, wins = [];
+  var lightMode = 0;
+  var curtains = [], curtAll = false;
+
+  // x = length, y = width (front wall at y = 0), z = height.
+  function box(parent, x, y, z, w, d, h, material) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), typeof material === 'number' ? mat(material) : material);
+    m.position.set(x + w / 2, z + h / 2, -(y + d / 2));
+    parent.add(m);
+    return m;
+  }
+  function tiled(parent, x, y, z, w, d, h, tile, grout, size, ru, rv) {
+    var t = new THREE.CanvasTexture(tileCanvas(tile, grout));
+    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.repeat.set(ru / size, rv / size);
+    var m = new THREE.MeshLambertMaterial({ map: t });
+    trash.push(t); trash.push(m);
+    return box(parent, x, y, z, w, d, h, m);
+  }
+
+  // Sizes drawn on the room: red lines with a label, and plain labels
+  var dims = null, dG = {}, labels = [], sizesOn = false;
+  var dimLineMat = new THREE.LineBasicMaterial({ color: 0xe5484d });
+  var dimDotMat = new THREE.MeshBasicMaterial({ color: 0xe5484d });
+  function v3(p) { return new THREE.Vector3(p[0], p[2], -p[1]); }
+  var items = [], cat = 'all';
+  function item(g, c) { var it = new THREE.Group(); it.userData.cat = c; g.add(it); items.push(it); return it; }
+  function note(g, p, text, c, it) {
+    var red = !!it;
+    if (!it) it = item(g, c);
+    var cv = document.createElement('canvas'), x = cv.getContext('2d');
+    var font = lang === 'km' ? '600 25px "Noto Serif Khmer", "Khmer OS", serif' : '600 28px system-ui, -apple-system, Segoe UI, sans-serif';
+    x.font = font;
+    var w = Math.ceil(x.measureText(text).width) + 26, hgt = lang === 'km' ? 54 : 44;
+    cv.width = w; cv.height = hgt;
+    x = cv.getContext('2d');
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, hgt);
+    x.strokeStyle = red ? '#e5484d' : '#1f2933'; x.lineWidth = 4; x.strokeRect(2, 2, w - 4, hgt - 4);
+    x.font = font; x.fillStyle = red ? '#c2262b' : '#1f2933'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(text, w / 2, hgt / 2 + 1);
+    var t = new THREE.CanvasTexture(cv);
+    var sm = new THREE.SpriteMaterial({ map: t, sizeAttenuation: false, depthTest: false, transparent: true });
+    trash.push(t); trash.push(sm);
+    var s = new THREE.Sprite(sm);
+    s.scale.set(0.03 * w / 44, 0.03 * hgt / 44, 1);
+    s.renderOrder = 10;
+    s.position.copy(v3(p));
+    s.userData.extra = [];
+    it.add(s);
+    labels.push(s);
+    return s;
+  }
+  function dim(g, a, b, text, c) {
+    var it = item(g, c), A = v3(a), B = v3(b), extra = [];
+    var ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([A, B]), dimLineMat);
+    it.add(ln); extra.push(ln);
+    [A, B].forEach(function (q) {
+      var d = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 8), dimDotMat);
+      d.position.copy(q);
+      it.add(d); extra.push(d);
+    });
+    note(g, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], text, c, it).userData.extra = extra;
+  }
+  function setCat(c) {
+    cat = c;
+    items.forEach(function (it) { it.visible = c === 'all' || it.userData.cat === c; });
+    Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
+      b.className = b.getAttribute('data-c') === c ? 'on' : '';
+    });
+  }
+
+  function build() {
+    var L = P.L, W = P.W, H = P.H;
+    var showRoof = roof ? roof.visible : false, showFront = front ? front.visible : true;
+    if (world) {
+      scene.remove(world);
+      world.traverse(function (o) { if (o.geometry) o.geometry.dispose(); });
+      scene.remove(dims);
+      dims.traverse(function (o) { if (o.geometry && !o.isSprite) o.geometry.dispose(); });
+      trash.forEach(function (t) { t.dispose(); });
+      trash = [];
+    }
+    world = new THREE.Group(); room = new THREE.Group(); roof = new THREE.Group(); front = new THREE.Group();
+    world.add(room); world.add(roof); world.add(front);
+    scene.add(world);
+    wins = [];
+    curtains = [];
+    dims = new THREE.Group(); dG = { room: new THREE.Group(), roof: new THREE.Group(), front: new THREE.Group() };
+    dims.add(dG.room); dims.add(dG.roof); dims.add(dG.front);
+    scene.add(dims);
+    labels = [];
+    items = [];
+
+    var SEG = L / 2 - 0.2, X2 = L / 2 + 0.2, zb = 0.1, zt = 0.1 + H;
+    var WIN = { x0: (SEG - 1.2) / 2, x1: (SEG + 1.2) / 2, z0: 0.9, z1: 2.1 };
+    var DOOR = { x0: (SEG - 0.9) / 2, x1: (SEG + 0.9) / 2, z0: 0.02, z1: 2.12 };
+
+    function wallX(parent, x0, y0, o) {
+      var T = 0.1;
+      box(parent, x0, y0, zb, o.x0, T, H, C.pink);
+      box(parent, x0 + o.x1, y0, zb, SEG - o.x1, T, H, C.pink);
+      box(parent, x0 + o.x0, y0, zb + o.z1, o.x1 - o.x0, T, H - o.z1, C.pink);
+      box(parent, x0 + o.x0, y0, zb, o.x1 - o.x0, T, o.z0, C.pink);
+    }
+    // Sliding window: black frame, two panes, the right pane slides over the left one
+    function slidingWindow(parent, ox, yc, oz) {
+      var WW = 1.2, HH = 1.2, F = 0.04, b = 0.03, sw = 0.58, sh = HH - 2 * F;
+      function Lb(g, x, y, z, w, d, h, m) { return box(g, ox + x, yc + y, oz + z, w, d, h, m); }
+      Lb(parent, 0, -0.04, 0, WW, 0.08, F, C.black);
+      Lb(parent, 0, -0.04, HH - F, WW, 0.08, F, C.black);
+      Lb(parent, 0, -0.04, F, F, 0.08, sh, C.black);
+      Lb(parent, WW - F, -0.04, F, F, 0.08, sh, C.black);
+      var win = { sashes: [] }, cur = null;
+      function glassPane(g, x, y, z, w, h) {
+        var out = yc > W / 2 ? -1 : 1;
+        var px = ox + x + w / 2, py = oz + z + h / 2, pz = -(yc + y);
+        var a = new THREE.Mesh(new THREE.PlaneGeometry(w, h), glassOut);
+        a.position.set(px, py, pz + out * 0.002);
+        if (out < 0) a.rotation.y = Math.PI;
+        g.add(a);
+        var c = new THREE.Mesh(new THREE.PlaneGeometry(w, h), glassIn);
+        c.position.set(px, py, pz - out * 0.002);
+        if (out > 0) c.rotation.y = Math.PI;
+        g.add(c);
+        c.userData.win = cur;
+        return a;
+      }
+      function sash(sx, yoff, dir) {
+        var g = new THREE.Group();
+        parent.add(g);
+        cur = { g: g, dir: dir, open: false, win: win };
+        win.sashes.push(cur);
+        var me = cur;
+        [Lb(g, sx, yoff - 0.01, F, sw, 0.02, b, C.black),
+         Lb(g, sx, yoff - 0.01, HH - F - b, sw, 0.02, b, C.black),
+         Lb(g, sx, yoff - 0.01, F + b, b, 0.02, sh - 2 * b, C.black),
+         Lb(g, sx + sw - b, yoff - 0.01, F + b, b, 0.02, sh - 2 * b, C.black),
+         glassPane(g, sx + b, yoff, F + b, sw - 2 * b, sh - 2 * b)
+        ].forEach(function (m) { m.userData.win = me; });
+        return g;
+      }
+      sash(F, -0.012, 1);
+      sash(WW - F - sw, 0.012, -1);
+      wins.push(win);
+    }
+
+    // Floor with 60 cm tiles
+    box(room, 0, 0, 0, L + 0.2, W + 0.2, 0.098, 0xd8ceb9);
+    tiled(room, 0, 0, 0.098, L + 0.2, W + 0.2, 0.002, '#e2d8c4', '#96918a', 0.6, L + 0.2, W + 0.2);
+
+    // 6 posts and the top beams
+    [0, L / 2, L].forEach(function (x) { [0, W].forEach(function (y) { box(room, x, y, zb, 0.2, 0.2, H, C.post); }); });
+    box(roof, 0, 0, zt, L + 0.2, 0.2, 0.3, C.beam);
+    box(roof, 0, W, zt, L + 0.2, 0.2, 0.3, C.beam);
+    [0, L / 2, L].forEach(function (x) { box(roof, x, 0.2, zt, 0.2, W - 0.2, 0.3, C.beam); });
+
+    // Stepped ceiling: flat base, a dropped frame, LED strips on the frame edges, spot lights
+    var zc = zt - 0.1, zr = zc - 0.1, zl = zc - 0.03;
+    var ox1 = 0.5, ox2 = L - 0.3, oy1 = 0.5, oy2 = W - 0.3, ix1 = 0.9, ix2 = L - 0.7, iy1 = 0.9, iy2 = W - 0.7;
+    var cp = [
+      box(roof, 0.15, 0.15, zc, L - 0.1, W - 0.1, 0.05, ceilMat),
+      box(roof, ox1, oy1, zr, ox2 - ox1, 0.4, 0.1, ceilMat),
+      box(roof, ox1, iy2, zr, ox2 - ox1, 0.4, 0.1, ceilMat),
+      box(roof, ox1, iy1, zr, 0.4, iy2 - iy1, 0.1, ceilMat),
+      box(roof, ix2, iy1, zr, 0.4, iy2 - iy1, 0.1, ceilMat)
+    ];
+    cp.forEach(function (m) { m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeMat)); });
+    box(roof, ox1 - 0.03, oy1 - 0.03, zl, ox2 - ox1 + 0.06, 0.03, 0.03, ledMat);
+    box(roof, ox1 - 0.03, oy2, zl, ox2 - ox1 + 0.06, 0.03, 0.03, ledMat);
+    box(roof, ox1 - 0.03, oy1, zl, 0.03, oy2 - oy1, 0.03, ledMat);
+    box(roof, ox2, oy1, zl, 0.03, oy2 - oy1, 0.03, ledMat);
+    box(roof, ix1, iy1, zl, ix2 - ix1, 0.03, 0.03, ledMat);
+    box(roof, ix1, iy2 - 0.03, zl, ix2 - ix1, 0.03, 0.03, ledMat);
+    box(roof, ix1, iy1 + 0.03, zl, 0.03, iy2 - iy1 - 0.06, 0.03, ledMat);
+    box(roof, ix2 - 0.03, iy1 + 0.03, zl, 0.03, iy2 - iy1 - 0.06, 0.03, ledMat);
+    [1 / 6, 1 / 2, 5 / 6].forEach(function (f) {
+      [oy1 + 0.2, oy2 - 0.2].forEach(function (y) {
+        var s = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.006, 24), lightMat);
+        s.position.set(ox1 + (ox2 - ox1) * f, zr - 0.003, -y);
+        roof.add(s);
+      });
+    });
+    var cx = (L + 0.2) / 2, cy = (W + 0.2) / 2;
+    var lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 40), lightMat);
+    lamp.position.set(cx, zc - 0.02, -cy);
+    roof.add(lamp);
+    lampL.position.set(cx - L / 4, zc - 0.2, -cy);
+    lampR.position.set(cx + L / 4, zc - 0.2, -cy);
+    ledLight.position.set(cx, zc - 0.2, -cy);
+    ledLight.distance = Math.max(7, L + 2);
+    ground.position.set(cx, -0.001, -cy);
+
+    // Walls: sides, back with 2 windows, front with a window (left) and the door (right)
+    box(room, 0.05, 0.2, zb, 0.1, W - 0.2, H, C.pink);
+    box(room, L + 0.05, 0.2, zb, 0.1, W - 0.2, H, C.pink);
+    wallX(room, 0.2, W + 0.05, WIN);
+    wallX(room, X2, W + 0.05, WIN);
+    slidingWindow(room, 0.2 + WIN.x0, W + 0.1, zb + WIN.z0);
+    slidingWindow(room, X2 + WIN.x0, W + 0.1, zb + WIN.z0);
+    wallX(front, 0.2, 0.05, WIN);
+    wallX(front, X2, 0.05, DOOR);
+    slidingWindow(front, 0.2 + WIN.x0, 0.1, zb + WIN.z0);
+
+    // Curtains inside, one for each window: a rod and two cloth panels that slide to the sides
+    function curtain(parent, wx0, yc) {
+      var cu = { open: curtAll, panels: [] }, hgt = 1.5, zc = zb + WIN.z0 + 0.6, n = 6, sw = 0.75 / n;
+      box(parent, wx0 - 0.2, yc - 0.01, zb + WIN.z0 + 1.35, 1.6, 0.02, 0.02, C.black);
+      [[wx0 - 0.15, 1], [wx0 + 1.35, -1]].forEach(function (e) {
+        var g = new THREE.Group();
+        g.position.set(e[0], 0, 0);
+        g.scale.x = cu.open ? 0.22 : 1;
+        parent.add(g);
+        for (var i = 0; i < n; i++) {
+          var cm = new THREE.Mesh(new THREE.BoxGeometry(sw, hgt, 0.02), mat(i % 2 ? C.curt2 : C.curt));
+          cm.position.set(e[1] * (i + 0.5) * sw, zc, -(yc + (i % 2 ? 0.012 : -0.012)));
+          cm.userData.cur = cu;
+          g.add(cm);
+        }
+        cu.panels.push(g);
+      });
+      curtains.push(cu);
+    }
+    curtain(room, 0.2 + WIN.x0, W - 0.03);
+    curtain(room, X2 + WIN.x0, W - 0.03);
+    curtain(front, 0.2 + WIN.x0, 0.23);
+
+    // Door on a hinge (left edge), it swings into the room
+    doorPivot = new THREE.Group();
+    doorPivot.position.set(X2 + DOOR.x0, 0, -0.1);
+    front.add(doorPivot);
+    var leaf = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.1, 0.04), mat(C.door));
+    leaf.position.set(0.45, zb + DOOR.z0 + 1.05, 0);
+    doorPivot.add(leaf);
+    var handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.12), mat(C.grey));
+    handle.position.set(0.81, 1.115, 0);
+    doorPivot.add(handle);
+    doorParts = [leaf, handle];
+    doorAngle = doorOpen ? Math.PI / 2 : 0;
+
+    // Wall tiles, 0.5 m high, inside
+    var WT = ['#f6f4ee', '#b9b4af'];
+    function wt(parent, x, y, w, d) { tiled(parent, x, y, zb, w, d, 0.5, WT[0], WT[1], 0.25, Math.max(w, d), 0.5); }
+    wt(room, 0.2, W + 0.04, SEG, 0.01);
+    wt(room, X2, W + 0.04, SEG, 0.01);
+    wt(room, 0.15, 0.2, 0.01, W - 0.2);
+    wt(room, L + 0.04, 0.2, 0.01, W - 0.2);
+    wt(front, 0.2, 0.15, SEG, 0.01);
+    wt(front, X2, 0.15, DOOR.x0, 0.01);
+    wt(front, X2 + DOOR.x1, 0.15, SEG - DOOR.x1, 0.01);
+
+    // Bed: back-left corner
+    (function (ox, oy, oz) {
+      box(room, ox, oy, oz, 0.05, 1.0, 0.9, C.wood);
+      box(room, ox + 0.05, oy, oz, 1.95, 1.0, 0.3, C.wood);
+      box(room, ox + 0.05, oy, oz + 0.3, 1.95, 1.0, 0.2, C.sheet);
+      box(room, ox + 0.1, oy + 0.2, oz + 0.5, 0.4, 0.6, 0.1, C.white);
+      box(room, ox + 0.8, oy - 0.005, oz + 0.5, 1.205, 1.01, 0.03, C.blanket);
+    })(0.2, W - 1.0, zb);
+
+    // Table with computer: right wall
+    (function (ox, oy, oz) {
+      box(room, ox, oy, oz + 0.71, 0.6, 1.2, 0.04, C.wood);
+      [[0, 0], [0.55, 0], [0, 1.15], [0.55, 1.15]].forEach(function (p) { box(room, ox + p[0], oy + p[1], oz, 0.05, 0.05, 0.71, C.wood); });
+      // 32 inch monitor: 72 x 42 cm
+      box(room, ox + 0.34, oy + 0.43, oz + 0.75, 0.22, 0.26, 0.02, C.black);
+      box(room, ox + 0.44, oy + 0.54, oz + 0.77, 0.04, 0.04, 0.2, C.black);
+      box(room, ox + 0.41, oy + 0.2, oz + 0.85, 0.03, 0.72, 0.42, C.black);
+      box(room, ox + 0.405, oy + 0.215, oz + 0.865, 0.005, 0.69, 0.39, screenMat);
+      box(room, ox + 0.44, oy + 0.3, oz + 0.9, 0.004, 0.52, 0.015, rgbB);
+      // RGB desktop PC on the floor under the table, left side: black case, 3 RGB fans, RGB strips
+      box(room, ox + 0.12, oy + 0.95, oz, 0.4, 0.18, 0.4, C.black);
+      [0.08, 0.2, 0.32].forEach(function (fz, i) {
+        var ring = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.004, 28), i === 1 ? rgbB : rgbA);
+        ring.rotation.z = Math.PI / 2;
+        ring.position.set(ox + 0.118, oz + fz, -(oy + 1.04));
+        room.add(ring);
+        var hub = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.006, 20), mat(C.black));
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(ox + 0.116, oz + fz, -(oy + 1.04));
+        room.add(hub);
+      });
+      box(room, ox + 0.14, oy + 0.947, oz + 0.02, 0.36, 0.003, 0.012, rgbB);
+      box(room, ox + 0.14, oy + 0.947, oz + 0.37, 0.36, 0.003, 0.012, rgbA);
+      // Keyboard with RGB light, and mouse
+      box(room, ox + 0.12, oy + 0.35, oz + 0.75, 0.14, 0.42, 0.02, C.black);
+      box(room, ox + 0.13, oy + 0.36, oz + 0.77, 0.12, 0.4, 0.002, rgbA);
+      box(room, ox + 0.14, oy + 0.82, oz + 0.75, 0.1, 0.06, 0.03, C.black);
+      box(room, ox + 0.16, oy + 0.845, oz + 0.78, 0.06, 0.01, 0.002, rgbB);
+      box(room, ox + 0.15, oy + 0.1, oz + 0.75, 0.05, 0.15, 0.02, C.lgrey);
+    })(L - 0.6, 0.9, zb);
+
+    // Gaming chair: black with red parts, high back, head pillow, arm rests, 5 wheels. It faces the table.
+    (function (ox, oy, oz) {
+      var R = C.red, K = C.black, mx = ox + 0.25, my = oy + 0.25;
+      for (var i = 0; i < 5; i++) {
+        var a = i * Math.PI * 2 / 5 + 0.3;
+        var leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 0.05), mat(K));
+        leg.position.set(mx + Math.cos(a) * 0.15, oz + 0.075, -(my + Math.sin(a) * 0.15));
+        leg.rotation.y = a;
+        room.add(leg);
+        var wheel = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), mat(K));
+        wheel.position.set(mx + Math.cos(a) * 0.3, oz + 0.03, -(my + Math.sin(a) * 0.3));
+        room.add(wheel);
+      }
+      var lift = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.31, 16), mat(C.grey));
+      lift.position.set(mx, oz + 0.245, -my);
+      room.add(lift);
+      box(room, ox, oy, oz + 0.4, 0.5, 0.5, 0.09, K);
+      box(room, ox + 0.04, oy, oz + 0.49, 0.46, 0.05, 0.04, R);
+      box(room, ox + 0.04, oy + 0.45, oz + 0.49, 0.46, 0.05, 0.04, R);
+      box(room, ox - 0.04, oy + 0.02, oz + 0.49, 0.08, 0.46, 0.8, K);
+      box(room, ox - 0.04, oy + 0.08, oz + 1.29, 0.08, 0.34, 0.08, K);
+      box(room, ox + 0.04, oy + 0.02, oz + 0.55, 0.03, 0.05, 0.62, R);
+      box(room, ox + 0.04, oy + 0.43, oz + 0.55, 0.03, 0.05, 0.62, R);
+      box(room, ox + 0.04, oy + 0.13, oz + 0.56, 0.06, 0.24, 0.14, R);
+      box(room, ox + 0.04, oy + 0.15, oz + 1.13, 0.05, 0.2, 0.13, R);
+      box(room, ox + 0.2, oy - 0.05, oz + 0.45, 0.04, 0.04, 0.2, K);
+      box(room, ox + 0.1, oy - 0.07, oz + 0.65, 0.26, 0.08, 0.03, K);
+      box(room, ox + 0.2, oy + 0.51, oz + 0.45, 0.04, 0.04, 0.2, K);
+      box(room, ox + 0.1, oy + 0.49, oz + 0.65, 0.26, 0.08, 0.03, K);
+    })(L - 1.3, 1.25, zb);
+
+    // Air conditioner: indoor unit in the center of the left wall
+    var acY = 0.2 + (W - 0.2) / 2 - 0.45, acZ = zt - 0.5;
+    box(room, 0.15, acY, acZ + 0.06, 0.2, 0.9, 0.24, C.white);
+    box(room, 0.15, acY + 0.02, acZ, 0.18, 0.86, 0.06, C.lgrey);
+    box(room, 0.35, acY + 0.74, acZ + 0.17, 0.002, 0.08, 0.04, C.lgrey);
+
+    // Air conditioner: outdoor unit on the outside of the back wall, above the left window
+    (function (ox, oy, oz) {
+      box(room, ox, oy, oz + 0.05, 0.8, 0.3, 0.55, C.white);
+      box(room, ox + 0.1, oy + 0.02, oz, 0.05, 0.26, 0.05, C.grey);
+      box(room, ox + 0.65, oy + 0.02, oz, 0.05, 0.26, 0.05, C.grey);
+      box(room, ox + 0.1, oy - 0.2, oz - 0.04, 0.05, 0.5, 0.04, C.grey);
+      box(room, ox + 0.65, oy - 0.2, oz - 0.04, 0.05, 0.5, 0.04, C.grey);
+      box(room, ox + 0.28, oy + 0.3, oz + 0.085, 0.48, 0.005, 0.48, C.lgrey);
+      function disc(r, t, y, c) {
+        var m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, t, 40), mat(c));
+        m.rotation.x = Math.PI / 2;
+        m.position.set(ox + 0.52, oz + 0.325, -(oy + y + t / 2));
+        room.add(m);
+      }
+      disc(0.22, 0.005, 0.305, C.fan);
+      disc(0.04, 0.004, 0.31, C.white);
+    })(0.2 + SEG / 2 - 0.4, W + 0.35, zt - 0.75);
+
+    // 3 sockets: next to the bed, next to the table, next to the air conditioner
+    function socketX(x, y, z, dir) {
+      box(room, dir > 0 ? x : x - 0.01, y, z, 0.01, 0.086, 0.086, C.white);
+      var hx = dir > 0 ? x + 0.01 : x - 0.012;
+      box(room, hx, y + 0.026, z + 0.037, 0.002, 0.008, 0.012, C.black);
+      box(room, hx, y + 0.052, z + 0.037, 0.002, 0.008, 0.012, C.black);
+    }
+    socketX(0.16, W - 1.2, 0.4, 1);
+    socketX(L + 0.04, W - 0.25, 0.4, -1);
+    socketX(0.15, acY - 0.2, zt - 0.4, 1);
+
+    // Sizes on the room
+    var dR = dG.room, dF = dG.front, dT = dG.roof;
+    dim(dR, [0.1, -0.6, 0.02], [L + 0.1, -0.6, 0.02], S('Length ', 'បណ្ដោយ ') + m(L), 'room');
+    dim(dR, [L + 0.8, 0.1, 0.02], [L + 0.8, W + 0.1, 0.02], S('Width ', 'ទទឹង ') + m(W), 'room');
+    dim(dR, [L + 0.45, -0.25, zb], [L + 0.45, -0.25, zt], S('Height ', 'កម្ពស់ ') + m(H), 'room');
+    var wx = 0.2 + WIN.x0, wz = zb + WIN.z0, dx = X2 + DOOR.x0;
+    dim(dF, [wx, -0.04, wz + 1.32], [wx + 1.2, -0.04, wz + 1.32], S('Window 1.2 m', 'បង្អួច 1.2 m'), 'open');
+    dim(dF, [dx, -0.04, zb + 2.24], [dx + 0.9, -0.04, zb + 2.24], S('Door 0.9 m', 'ទ្វារ 0.9 m'), 'open');
+    dim(dF, [dx + 1.02, -0.04, zb], [dx + 1.02, -0.04, zb + 2.12], '2.1 m', 'open');
+    dim(dF, [wx - 0.12, -0.04, wz], [wx - 0.12, -0.04, wz + 1.2], '1.2 m', 'open');
+    dim(dF, [wx + 0.6, -0.04, zb], [wx + 0.6, -0.04, wz], '0.9 m', 'open');
+    dim(dR, [0.2, W - 1.06, zb + 0.56], [2.2, W - 1.06, zb + 0.56], S('Bed 2.0 m', 'គ្រែ 2.0 m'), 'furn');
+    dim(dR, [L - 0.66, 0.9, zb + 0.77], [L - 0.66, 2.1, zb + 0.77], S('Table 1.2 m', 'តុ 1.2 m'), 'furn');
+    dim(dR, [2.26, W - 1.0, zb + 0.5], [2.26, W, zb + 0.5], '1.0 m', 'furn');
+    dim(dR, [L - 0.6, 0.84, zb + 0.77], [L, 0.84, zb + 0.77], '0.6 m', 'furn');
+    note(dR, [L - 1.3, 1.5, zb + 1.5], S('Gaming chair 1.37 m high', 'កៅអីហ្គេមីង កម្ពស់ 1.37 m'), 'furn');
+    dim(dR, [L / 2 + 0.1, W - 0.05, zb], [L / 2 + 0.1, W - 0.05, zc], S('Floor to ceiling ', 'កម្រាលដល់ពិដាន ') + m(zc - zb), 'room');
+    note(dR, [0.1, -0.12, zb + 1.5], S('Pillar 20 x 20 cm', 'សសរ 20 x 20 cm'), 'room');
+    note(dT, [L * 0.3, -0.08, zt + 0.15], S('Beam 20 x 30 cm', 'ធ្នឹម 20 x 30 cm'), 'room');
+    note(dR, [0.2 + SEG / 2, W + 0.22, wz - 0.15], S('Window 1.2 x 1.2 m', 'បង្អួច 1.2 x 1.2 m'), 'open');
+    note(dR, [X2 + SEG / 2, W + 0.22, wz - 0.15], S('Window 1.2 x 1.2 m', 'បង្អួច 1.2 x 1.2 m'), 'open');
+    dim(dR, [0.18, 0.55, zb], [0.18, 0.55, zb + 0.5], S('Wall tiles 0.5 m', 'ការ៉ូជញ្ជាំង 0.5 m'), 'other');
+    note(dR, [cx, 0.55, zb + 0.03], S('Floor tile 60 x 60 cm', 'ការ៉ូកម្រាល 60 x 60 cm'), 'other');
+    note(dR, [0.42, acY + 0.45, acZ - 0.1], S('Air conditioner 90 x 30 x 20 cm', 'ម៉ាស៊ីនត្រជាក់ 90 x 30 x 20 cm'), 'other');
+    note(dR, [0.2 + SEG / 2, W + 0.75, zt - 0.05], S('Outside unit 80 x 55 x 30 cm', 'ម៉ាស៊ីនខាងក្រៅ 80 x 55 x 30 cm'), 'other');
+    note(dT, [cx, oy1 + 0.2, zr - 0.06], S('Ceiling frame 40 cm wide', 'ស៊ុមពិដាន ទទឹង 40 cm'), 'other');
+    note(dR, [0.22, W - 1.16, 0.62], S('Socket 0.3 m high', 'ព្រីភ្លើង កម្ពស់ 0.3 m'), 'other');
+    setCat(cat);
+
+    roof.visible = showRoof;
+    front.visible = showFront;
+  }
+
+  // Buttons
+  function el(id) { return document.getElementById(id); }
+  var bRoof = el('tRoof'), bFront = el('tFront'), bSpin = el('tSpin'), bDoor = el('tDoor'), bLight = el('tLight');
+  function setRoof(v) { roof.visible = v; bRoof.textContent = v ? S('Hide roof', 'លាក់ដំបូល') : S('Show roof', 'បង្ហាញដំបូល'); }
+  function setFront(v) { front.visible = v; bFront.textContent = v ? S('Hide front wall', 'លាក់ជញ្ជាំងមុខ') : S('Show front wall', 'បង្ហាញជញ្ជាំងមុខ'); }
+  function setSpin(v) { controls.autoRotate = v; bSpin.textContent = v ? S('360 spin: on', 'បង្វិល 360°៖ បើក') : S('360 spin: off', 'បង្វិល 360°៖ បិទ'); }
+  function setDoor(v) { doorOpen = v; bDoor.textContent = v ? S('Close door', 'បិទទ្វារ') : S('Open door', 'បើកទ្វារ'); }
+  var bCurt = el('tCurt');
+  function curtText() { bCurt.textContent = curtAll ? S('Close curtains', 'បិទវាំងនន') : S('Open curtains', 'បើកវាំងនន'); }
+  bCurt.onclick = function () {
+    curtAll = !curtAll;
+    curtains.forEach(function (c) { c.open = curtAll; });
+    curtText();
+  };
+  function setLight(m) {
+    lightMode = m;
+    bLight.textContent = [S('Lights: color play', 'ភ្លើង៖ លេងពណ៌'), S('Lights: warm white', 'ភ្លើង៖ ពណ៌សក្ដៅ'), S('Lights: off', 'ភ្លើង៖ បិទ')][m];
+    if (m === 0) { ledLight.intensity = 0.4; lampL.intensity = lampR.intensity = 0.2; lightMat.color.set(C.light); }
+    if (m === 1) { ledMat.color.set(0xffe2a8); ledLight.color.set(0xffe2a8); ledLight.intensity = 0.5; lampL.intensity = lampR.intensity = 0.35; lightMat.color.set(C.light); }
+    if (m === 2) { ledMat.color.set(0x555555); ledLight.intensity = 0; lampL.intensity = lampR.intensity = 0; lightMat.color.set(0x8a8a8a); }
+  }
+  function look(px, py, pz, tx, ty, tz, fov, speed) {
+    setSpin(false);
+    camera.fov = fov || 50;
+    camera.updateProjectionMatrix();
+    controls.rotateSpeed = speed || 1;
+    camera.position.set(px, py, pz);
+    controls.target.set(tx, ty, tz);
+    controls.update();
+  }
+  var current = 'out';
+  var views = {
+    out: function () { var L = P.L, W = P.W, H = P.H, cx = (L + 0.2) / 2, cy = (W + 0.2) / 2; setRoof(false); setFront(true); look(cx + L * 1.1, H + 2.6 + (W - 2.5) * 0.6, 2.2 + L * 0.5, cx, 1.2, -cy); },
+    back: function () { var L = P.L, W = P.W, H = P.H, cx = (L + 0.2) / 2, cy = (W + 0.2) / 2; setRoof(true); setFront(true); look(cx - L * 0.85, H + 0.6, -(W + 0.2) - L * 1.1, cx, H / 2, -cy); },
+    inside: function () { var L = P.L, W = P.W; setRoof(true); setFront(true); look(L - 0.25, 1.65, -0.45, 1.6, 1.25, -(W - 0.6)); },
+    ceil: function () { var cx = (P.L + 0.2) / 2, cy = (P.W + 0.2) / 2; setRoof(true); setFront(true); look(cx, 0.35, -cy + 0.02, cx, 0.395, -cy, 80, -0.5); },
+    top: function () { var L = P.L, W = P.W, H = P.H, cx = (L + 0.2) / 2, cy = (W + 0.2) / 2; setRoof(false); setFront(true); look(cx, H + 2 + Math.max(L, W * 1.8), -cy + 0.01, cx, 0, -cy); }
+  };
+  function go(name) { current = name; views[name](); }
+  el('vOut').onclick = function () { go('out'); };
+  el('vBack').onclick = function () { go('back'); };
+  el('vIn').onclick = function () { go('inside'); };
+  el('vCeil').onclick = function () { go('ceil'); };
+  el('vTop').onclick = function () { go('top'); };
+  bRoof.onclick = function () { setRoof(!roof.visible); };
+  bFront.onclick = function () { setFront(!front.visible); };
+  bSpin.onclick = function () { setSpin(!controls.autoRotate); };
+  bDoor.onclick = function () { setFront(true); setDoor(!doorOpen); };
+  bLight.onclick = function () { setLight((lightMode + 1) % 3); };
+  controls.addEventListener('start', function () { setSpin(false); });
+
+  // One button that shows the size of the room and of every item
+  function m(v) { return v.toFixed(2).replace(/0$/, '') + ' m'; }
+  function sizeData() {
+    var L = P.L, W = P.W, H = P.H;
+    var wid = S('Width', 'ទទឹង'), hei = S('Height', 'កម្ពស់'), thick = S('Thickness', 'កម្រាស់');
+    function high(v) { return S(v + ' high', 'កម្ពស់ ' + v); }
+    function floor(v) { return S(v + ' above floor', v + ' ពីកម្រាល'); }
+    return [
+      [S('Room', 'បន្ទប់'), [
+        [S('Length (pillar to pillar)', 'បណ្ដោយ (ពីសសរដល់សសរ)'), m(L)],
+        [S('Width (pillar to pillar)', 'ទទឹង (ពីសសរដល់សសរ)'), m(W)],
+        [S('Outside size', 'ទំហំខាងក្រៅ'), m(L + 0.2) + ' x ' + m(W + 0.2)],
+        [S('Inside size', 'ទំហំខាងក្នុង'), m(L - 0.1) + ' x ' + m(W - 0.1)],
+        [S('Wall height', 'កម្ពស់ជញ្ជាំង'), m(H)],
+        [S('Floor to ceiling', 'ពីកម្រាលដល់ពិដាន'), m(H - 0.1)],
+        [S('Floor to ceiling frame', 'ពីកម្រាលដល់ស៊ុមពិដាន'), m(H - 0.2)]
+      ]],
+      [S('Structure', 'គ្រោងបន្ទប់'), [
+        [S('Pillars (6)', 'សសរ (6)'), '20 x 20 cm, ' + high(m(H))],
+        [S('Top beams', 'ធ្នឹមខាងលើ'), S('20 cm wide, 30 cm high', 'ទទឹង 20 cm កម្ពស់ 30 cm')],
+        [S('Walls', 'ជញ្ជាំង'), S('10 cm thick', 'កម្រាស់ 10 cm')],
+        [S('Floor slab', 'កម្រាលបេតុង'), S('10 cm thick', 'កម្រាស់ 10 cm')]
+      ]],
+      [S('Windows (3, sliding, black)', 'បង្អួច (3 បង្អួចអូស ពណ៌ខ្មៅ)'), [
+        [wid, '1.2 m'],
+        [hei, '1.2 m'],
+        [S('Bottom above floor', 'បាតបង្អួចពីកម្រាល'), '0.9 m'],
+        [S('Top above floor', 'កំពូលបង្អួចពីកម្រាល'), '2.1 m'],
+        [S('Each glass pane', 'កញ្ចក់មួយបន្ទះ'), S('0.58 m wide', 'ទទឹង 0.58 m')],
+        [S('Frame', 'ស៊ុម'), '4 cm'],
+        [S('Curtain (3)', 'វាំងនន (3)'), '1.5 x 1.5 m']
+      ]],
+      [S('Door (1)', 'ទ្វារ (1)'), [
+        [wid, '0.9 m'],
+        [hei, '2.1 m'],
+        [thick, '4 cm']
+      ]],
+      [S('Tiles', 'ការ៉ូ'), [
+        [S('Floor tile', 'ការ៉ូកម្រាល'), '60 x 60 cm'],
+        [S('Wall tile', 'ការ៉ូជញ្ជាំង'), '25 x 25 cm'],
+        [S('Wall tile height', 'កម្ពស់ការ៉ូជញ្ជាំង'), S('0.5 m (2 rows)', '0.5 m (2 ជួរ)')]
+      ]],
+      [S('Ceiling and lights', 'ពិដាន និងភ្លើង'), [
+        [S('Ceiling frame', 'ស៊ុមពិដាន'), S('40 cm wide, 10 cm drop', 'ទទឹង 40 cm ទម្លាក់ 10 cm')],
+        [S('LED strip', 'ខ្សែភ្លើង LED'), '3 cm'],
+        [S('Spot lights (6)', 'ភ្លើងតូច (6)'), S('10 cm round', 'មូល 10 cm')],
+        [S('Center light (1)', 'ភ្លើងកណ្ដាល (1)'), S('36 cm round', 'មូល 36 cm')]
+      ]],
+      [S('Air conditioner', 'ម៉ាស៊ីនត្រជាក់'), [
+        [S('Inside unit', 'ម៉ាស៊ីនខាងក្នុង'), '90 x 30 x 20 cm'],
+        [S('Inside unit above floor', 'ម៉ាស៊ីនខាងក្នុងពីកម្រាល'), m(H - 0.5)],
+        [S('Outside unit', 'ម៉ាស៊ីនខាងក្រៅ'), '80 x 55 x 30 cm']
+      ]],
+      [S('Sockets (3)', 'ព្រីភ្លើង (3)'), [
+        [S('Plate', 'ផ្ទៃព្រី'), '8.6 x 8.6 cm'],
+        [S('Bed and table sockets', 'ព្រីក្បែរគ្រែ និងតុ'), floor('0.3 m')],
+        [S('Air conditioner socket', 'ព្រីម៉ាស៊ីនត្រជាក់'), floor(m(H - 0.4))]
+      ]],
+      [S('Furniture', 'គ្រឿងសង្ហារឹម'), [
+        [S('Bed', 'គ្រែ'), '2.0 x 1.0 m, ' + high('0.5 m')],
+        [S('Bed head board', 'ក្បាលគ្រែ'), high('0.9 m')],
+        [S('Table', 'តុ'), '1.2 x 0.6 m, ' + high('0.75 m')],
+        [S('Monitor, 32 inch', 'អេក្រង់ 32 អ៊ីញ'), '72 x 42 cm'],
+        [S('RGB desktop PC', 'កុំព្យូទ័រ RGB'), '18 x 40 x 40 cm'],
+        [S('Gaming chair', 'កៅអីហ្គេមីង'), '50 x 50 cm, ' + high('1.37 m')],
+        [S('Gaming chair seat', 'កន្លែងអង្គុយកៅអីហ្គេមីង'), floor('0.49 m')]
+      ]]
+    ];
+  }
+  var sizesBox = el('sizes'), bSizes = el('tSizes'), bList = el('tList'), listOn = false;
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function drawSizes() {
+    sizesBox.innerHTML = sizeData().map(function (g) {
+      return '<h3>' + esc(g[0]) + '</h3><table>' + g[1].map(function (r) {
+        return '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>';
+      }).join('') + '</table>';
+    }).join('');
+  }
+  // Price list: quantity from the room size, price per unit can be typed in
+  var RATE = 4000;
+  var PR = {};
+  try { PR = JSON.parse(localStorage.getItem('roomPrices') || '{}') || {}; } catch (e) { PR = {}; }
+  function priceData() {
+    var L = P.L, W = P.W, H = P.H, SEG = L / 2 - 0.2;
+    var wallA = 4 * SEG * H + 2 * (W - 0.2) * H - (3 * 1.44 + 1.89);
+    var floorA = (L - 0.1) * (W - 0.1);
+    var wtA = (2 * ((L - 0.1) + (W - 0.1)) - 0.9) * 0.5;
+    var slab = (L + 0.2) * (W + 0.2) * 0.1;
+    var conc = slab + 6 * 0.04 * H + 2 * (L + 0.2) * 0.06 + 3 * (W - 0.2) * 0.06;
+    var mortar = wallA * 0.02 + wallA * 2 * 0.015 + floorA * 0.03;
+    var led = Math.ceil(2 * ((L - 0.8) + (W - 0.8)) + 2 * ((L - 1.6) + (W - 1.6)));
+    var pc = S('piece', 'ដុំ'), box = S('box', 'កេះ'), bag = S('bag', 'បាវ'), set = S('set', 'ឈុត'), unit = S('piece', 'គ្រាប់'), bucket = S('bucket', 'ធុង'), can = S('can', 'កំប៉ុង');
+    // [key, name, quantity, unit, price in riel, true when the price came from the owner]
+    return [
+      [S('Brick and tiles', 'ឥដ្ឋ និងការ៉ូ'), [
+        ['brick', S('Brick', 'ឥដ្ឋ'), Math.ceil(wallA * 50 * 1.05 / 10) * 10, pc, 190, true],
+        ['ftile', S('Floor tile 60 x 60 cm', 'ការ៉ូកម្រាល 60 x 60 cm'), Math.ceil(floorA * 1.1 / 1.44), box, 28000, true],
+        ['wtile', S('Wall tile 25 x 25 cm', 'ការ៉ូជញ្ជាំង 25 x 25 cm'), Math.ceil(wtA * 1.1), box, 24000]
+      ]],
+      [S('Concrete and plaster', 'បេតុង និងបាយអ'), [
+        ['cement', S('Cement, 50 kg', 'ស៊ីម៉ងត៍ 50 kg'), Math.ceil(conc * 7 + mortar * 6), bag, 20000],
+        ['sand', S('Sand', 'ខ្សាច់'), Math.ceil(conc * 0.5 + mortar * 1.1), 'm³', 60000],
+        ['gravel', S('Crushed stone', 'ថ្មកិន'), Math.ceil(conc * 0.8), 'm³', 80000],
+        ['steel', S('Steel bar', 'ដែក'), Math.ceil(((conc - slab) * 100 + slab * 60) / 10) * 10, 'kg', 3200]
+      ]],
+      [S('Paint', 'ថ្នាំលាប'), [
+        ['primer', S('Primer, 18 L', 'ថ្នាំទ្រនាប់ 18 L'), 1, bucket, 120000],
+        ['pink', S('Pink wall paint, 18 L', 'ថ្នាំលាបជញ្ជាំងពណ៌ផ្កាឈូក 18 L'), 1, bucket, 180000],
+        ['blue', S('Paint for pillars and beams, 3.5 L', 'ថ្នាំលាបសសរ និងធ្នឹម 3.5 L'), 2, can, 50000]
+      ]],
+      [S('Windows and door', 'បង្អួច និងទ្វារ'), [
+        ['window', S('Sliding window, black, 1.2 x 1.2 m', 'បង្អួចអូស ពណ៌ខ្មៅ 1.2 x 1.2 m'), 3, set, 280000],
+        ['curtain', S('Curtain with rod, 1.5 x 1.5 m', 'វាំងនន មានដងព្យួរ 1.5 x 1.5 m'), 3, set, 100000],
+        ['door', S('Door with frame and lock', 'ទ្វារ មានស៊ុម និងសោ'), 1, set, 400000]
+      ]],
+      [S('Ceiling and lights', 'ពិដាន និងភ្លើង'), [
+        ['gypsum', S('Gypsum ceiling with frame', 'ពិដានហ្គីបស៊ូម មានគ្រោង'), Math.ceil(floorA * 1.25), 'm²', 32000],
+        ['led', S('LED strip', 'ខ្សែភ្លើង LED'), led, 'm', 6000],
+        ['ledc', S('LED controller', 'ឧបករណ៍បញ្ជា LED'), 1, set, 40000],
+        ['spot', S('Spot light', 'ភ្លើងតូចបង្កប់ពិដាន'), 6, unit, 12000],
+        ['lamp', S('Center light', 'ភ្លើងកណ្ដាល'), 1, unit, 60000]
+      ]],
+      [S('Electric', 'អគ្គិសនី'), [
+        ['socket', S('Socket', 'ព្រីភ្លើង'), 3, unit, 12000],
+        ['switch', S('Light switch', 'កុងតាក់ភ្លើង'), 2, unit, 8000],
+        ['wire', S('Electric wire', 'ខ្សែភ្លើង'), 50, 'm', 1500]
+      ]],
+      [S('Air conditioner', 'ម៉ាស៊ីនត្រជាក់'), [
+        ['ac', S('Air conditioner 1 HP, with install', 'ម៉ាស៊ីនត្រជាក់ 1 សេះ រួមដំឡើង'), 1, set, 1400000]
+      ]],
+      [S('Furniture', 'គ្រឿងសង្ហារឹម'), [
+        ['bed', S('Bed with mattress', 'គ្រែ និងពូក'), 1, set, 600000],
+        ['table', S('Table', 'តុ'), 1, pc, 200000],
+        ['gchair', S('Gaming chair', 'កៅអីហ្គេមីង'), 1, pc, 360000],
+        ['rgbpc', S('RGB desktop PC', 'កុំព្យូទ័រ RGB'), 1, set, 2800000],
+        ['mon32', S('Monitor, 32 inch', 'អេក្រង់ 32 អ៊ីញ'), 1, pc, 800000]
+      ]]
+    ];
+  }
+  function riel(n) { return Math.round(n).toLocaleString('en-US') + ' ៛'; }
+  function priceOf(r) { var v = PR[r[0]]; return typeof v === 'number' && v >= 0 ? v : r[4]; }
+  var pricesBox = el('prices'), bPrice = el('tPrice'), priceOn = false;
+  function priceTotal() {
+    var sum = 0;
+    priceData().forEach(function (g) { g[1].forEach(function (r) { sum += r[2] * priceOf(r); }); });
+    return sum;
+  }
+  function totalText(sum) { return riel(sum) + '  (' + S('about', 'ប្រហែល') + ' $' + Math.round(sum / RATE).toLocaleString('en-US') + ')'; }
+  function drawPrices() {
+    var est = S('est.', 'ប៉ាន់ស្មាន');
+    var html = '<table><tr><th>' + S('Item', 'មុខទំនិញ') + '</th><th class="r">' + S('Qty', 'ចំនួន') + '</th><th class="r">' + S('Price (៛)', 'តម្លៃ (៛)') + '</th><th class="r">' + S('Total', 'សរុប') + '</th></tr>';
+    priceData().forEach(function (g) {
+      html += '<tr><td colspan="4"><h3>' + esc(g[0]) + '</h3></td></tr>';
+      g[1].forEach(function (r) {
+        var changed = typeof PR[r[0]] === 'number';
+        html += '<tr><td>' + esc(r[1]) + (r[5] || changed ? '' : ' <span class="est">(' + est + ')</span>') + '</td><td class="r">' + r[2].toLocaleString('en-US') + ' ' + esc(r[3]) +
+          '</td><td class="r"><input type="number" min="0" step="100" inputmode="numeric" data-k="' + r[0] + '" data-q="' + r[2] + '" value="' + priceOf(r) + '" aria-label="' + esc(r[1]) + '"></td><td class="r" id="pt_' + r[0] + '">' + riel(r[2] * priceOf(r)) + '</td></tr>';
+      });
+    });
+    html += '<tr class="sum"><td colspan="2">' + S('Total', 'សរុបទាំងអស់') + '</td><td colspan="2" class="r" id="pt_all">' + totalText(priceTotal()) + '</td></tr></table>';
+    html += '<p>' + S('Brick and floor tile prices are yours. Prices marked "est." are my estimates, not real shop prices. Type your own price in the box and the total changes.', 'តម្លៃឥដ្ឋ និងការ៉ូកម្រាល ជាតម្លៃរបស់អ្នក។ តម្លៃដែលមានពាក្យ «ប៉ាន់ស្មាន» ជាតម្លៃប៉ាន់ស្មាន មិនមែនតម្លៃពិតនៅហាងទេ។ សូមវាយតម្លៃផ្ទាល់ខ្លួនក្នុងប្រអប់ ហើយតម្លៃសរុបនឹងប្ដូរ។') + '</p>';
+    html += '<p>' + S('Not included: foundation, roof, labor, transport. $1 = 4,000 ៛.', 'មិនរាប់បញ្ចូល៖ គ្រឹះ ដំបូល ថ្លៃឈ្នួល និងថ្លៃដឹក។ $1 = 4,000 ៛។') + '</p>';
+    pricesBox.innerHTML = html;
+  }
+  pricesBox.addEventListener('input', function (e) {
+    var t = e.target, k = t && t.getAttribute && t.getAttribute('data-k');
+    if (!k) return;
+    var v = parseFloat(t.value);
+    if (isNaN(v) || v < 0) delete PR[k]; else PR[k] = v;
+    try { localStorage.setItem('roomPrices', JSON.stringify(PR)); } catch (err) {}
+    var q = parseFloat(t.getAttribute('data-q')), cell = el('pt_' + k);
+    if (cell && !isNaN(v) && v >= 0) cell.textContent = riel(q * v);
+    var all = el('pt_all');
+    if (all) all.textContent = totalText(priceTotal());
+  });
+
+  function sizeBtnText() {
+    bSizes.textContent = sizesOn ? S('Hide sizes', 'លាក់ទំហំ') : S('Show sizes', 'បង្ហាញទំហំ');
+    bList.textContent = listOn ? S('Hide size list', 'លាក់បញ្ជីទំហំ') : S('Size list', 'បញ្ជីទំហំ');
+    bPrice.textContent = priceOn ? S('Hide price list', 'លាក់បញ្ជីតម្លៃ') : S('Price list', 'បញ្ជីតម្លៃ');
+  }
+  function showPanels() {
+    if (listOn) drawSizes();
+    if (priceOn) drawPrices();
+    sizesBox.style.display = listOn ? 'block' : 'none';
+    pricesBox.style.display = priceOn ? 'block' : 'none';
+    sizeBtnText();
+  }
+  bSizes.onclick = function () {
+    sizesOn = !sizesOn;
+    sizeBtnText();
+    el('cats').style.display = sizesOn ? 'flex' : 'none';
+  };
+  bList.onclick = function () { listOn = !listOn; if (listOn) priceOn = false; showPanels(); };
+  bPrice.onclick = function () { priceOn = !priceOn; if (priceOn) listOn = false; showPanels(); };
+  // Language switch
+  var CATS = { all: ['All sizes', 'ទំហំទាំងអស់'], room: ['Room', 'បន្ទប់'], open: ['Windows and door', 'បង្អួច និងទ្វារ'], furn: ['Furniture', 'គ្រឿងសង្ហារឹម'], other: ['Tiles, ceiling, air conditioner', 'ការ៉ូ ពិដាន ម៉ាស៊ីនត្រជាក់'] };
+  function applyLang() {
+    document.body.className = lang === 'km' ? 'km' : '';
+    el('vOut').textContent = S('Outside view', 'មើលពីក្រៅ');
+    el('vBack').textContent = S('Back view', 'មើលពីក្រោយ');
+    el('vIn').textContent = S('Inside view', 'មើលខាងក្នុង');
+    el('vCeil').textContent = S('Ceiling view', 'មើលពិដាន');
+    el('vTop').textContent = S('Top view', 'មើលពីលើ');
+    el('tLang').textContent = S('ភាសាខ្មែរ', 'English');
+    el('hint').textContent = S('Click the door, a curtain, or a window pane to open it. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន ឬបន្ទះបង្អួចដើម្បីបើក។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
+    Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
+      var c = CATS[b.getAttribute('data-c')];
+      b.textContent = S(c[0], c[1]);
+    });
+    setSpin(controls.autoRotate); setDoor(doorOpen); setLight(lightMode); sizeBtnText(); curtText();
+    build();
+    setRoof(roof.visible); setFront(front.visible);
+    showPanels();
+  }
+  el('tLang').onclick = function () {
+    lang = lang === 'km' ? 'en' : 'km';
+    applyLang();
+    if (lang === 'km' && document.fonts && document.fonts.load) {
+      document.fonts.load('600 25px "Noto Serif Khmer"', 'បន្ទប់').then(function () { if (lang === 'km') build(); });
+    }
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
+    b.onclick = function () { setCat(b.getAttribute('data-c')); };
+  });
+  // Hide a label when something is in front of it, or when it would sit on top of another label
+  var occ = new THREE.Raycaster(), tick = 0;
+  function hideCovered() {
+    var cp = camera.position, tanH = Math.tan(camera.fov * Math.PI / 360), placed = [];
+    labels.forEach(function (s) {
+      if (!shown(s.parent)) return;
+      var d = s.position.clone().sub(cp), dist = d.length();
+      occ.set(cp, d.normalize());
+      occ.near = 0.05; occ.far = Math.max(0.06, dist - 0.15);
+      var hits = occ.intersectObjects([world], true), ok = true;
+      for (var i = 0; i < hits.length; i++) {
+        var o = hits[i].object;
+        if (o.isMesh && o.material !== glassIn && shown(o)) { ok = false; break; }
+      }
+      if (ok) {
+        var n = s.position.clone().project(camera);
+        var hw = s.scale.x / (2 * tanH * camera.aspect) * 1.08, hh = s.scale.y / (2 * tanH) * 1.25;
+        if (n.z > 1 || n.z < -1) ok = false;
+        for (var j = 0; ok && j < placed.length; j++) {
+          var q = placed[j];
+          if (Math.abs(n.x - q[0]) < hw + q[2] && Math.abs(n.y - q[1]) < hh + q[3]) ok = false;
+        }
+        if (ok) placed.push([n.x, n.y, hw, hh]);
+      }
+      s.visible = ok;
+      s.userData.extra.forEach(function (e) { e.visible = ok; });
+    });
+  }
+
+  // Click the door or a window
+  var ray = new THREE.Raycaster(), downAt = null;
+  function shown(o) { while (o) { if (!o.visible) return false; o = o.parent; } return true; }
+  function pick(e) {
+    var r = renderer.domElement.getBoundingClientRect();
+    var p = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(p, camera);
+    var hits = ray.intersectObjects([world], true);
+    for (var i = 0; i < hits.length; i++) {
+      var o = hits[i].object;
+      if (o.isLineSegments || !shown(o)) continue;
+      if (doorParts.indexOf(o) >= 0) return 'door';
+      if (o.userData.cur) return { cur: o.userData.cur };
+      return o.userData.win || null;
+    }
+    return null;
+  }
+  renderer.domElement.addEventListener('pointerdown', function (e) { downAt = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', function (e) {
+    if (!downAt) return;
+    var moved = Math.abs(e.clientX - downAt[0]) + Math.abs(e.clientY - downAt[1]);
+    downAt = null;
+    if (moved >= 6) return;
+    var t = pick(e);
+    if (t === 'door') setDoor(!doorOpen);
+    else if (t && t.cur) t.cur.open = !t.cur.open;
+    else if (t) {
+      var op = !t.open;
+      t.win.sashes.forEach(function (s) { s.open = false; });
+      t.open = op;
+    }
+  });
+  renderer.domElement.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'mouse' && !e.buttons) renderer.domElement.style.cursor = pick(e) ? 'pointer' : '';
+  });
+
+  function fit() {
+    var w = holder.clientWidth || window.innerWidth, h = holder.clientHeight || window.innerHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', fit);
+
+  build();
+  fit();
+  setLight(0);
+  go('out');
+  (function loop() {
+    requestAnimationFrame(loop);
+    var goal = doorOpen ? Math.PI / 2 : 0;
+    doorAngle += (goal - doorAngle) * 0.12;
+    if (Math.abs(goal - doorAngle) < 0.001) doorAngle = goal;
+    doorPivot.rotation.y = doorAngle;
+    wins.forEach(function (w) {
+      w.sashes.forEach(function (s) {
+        var g = s.open ? s.dir * 0.52 : 0;
+        s.g.position.x += (g - s.g.position.x) * 0.12;
+        if (Math.abs(g - s.g.position.x) < 0.001) s.g.position.x = g;
+      });
+    });
+    curtains.forEach(function (c) {
+      c.panels.forEach(function (g) {
+        var goalS = c.open ? 0.22 : 1;
+        g.scale.x += (goalS - g.scale.x) * 0.12;
+        if (Math.abs(goalS - g.scale.x) < 0.002) g.scale.x = goalS;
+      });
+    });
+    var hue = (performance.now() / 4000) % 1;
+    rgbA.color.setHSL(hue, 1, 0.55);
+    rgbB.color.setHSL((hue + 0.45) % 1, 1, 0.55);
+    if (lightMode === 0) {
+      ledMat.color.setHSL((performance.now() / 7000) % 1, 1, 0.55);
+      ledLight.color.copy(ledMat.color);
+    }
+    dims.visible = sizesOn;
+    dG.roof.visible = roof.visible;
+    dG.front.visible = front.visible;
+    controls.update();
+    if (sizesOn && tick++ % 5 === 0) hideCovered();
+    renderer.render(scene, camera);
+  })();
+})();
+</script>
+</body>
+</html>
