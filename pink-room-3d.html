@@ -118,6 +118,8 @@
   <button id="tFront" class="sw">Front wall</button>
   <button id="tDoor" class="sw">Door open</button>
   <button id="tCurt" class="sw">Curtains open</button>
+  <button id="tAc" class="sw">Air conditioner</button>
+  <button id="tFan" class="sw">Fan</button>
   <button id="tLight">Lights: color play</button>
   <div class="grp" id="gSize">Sizes and prices</div>
   <button id="tSizes" class="sw">Size labels</button>
@@ -141,7 +143,7 @@
 </div>
 <div id="sizes" class="panel"></div>
 <div id="prices" class="panel"></div>
-<div id="hint">Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan to turn it on or off. Drag to rotate. Scroll or pinch to zoom.</div>
+<div id="hint">Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan or the air conditioner to turn it on or off. Drag to rotate. Scroll or pinch to zoom.</div>
 <div id="err">The 3D view could not load. Check your internet connection and reload the page.</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -233,6 +235,11 @@
   var curtains = [], curtAll = false;
   var wardDoors = [], wardOpen = [false, false];
   var fanOsc = null, fanBlades = null, fanOn = true, fanSpeed = 0, fanT = 0;
+  // Air conditioner: flap, outdoor fan blades and cold air streaks. Click a unit to switch it.
+  var acOn = true, acPow = 0, acFlap = null, acBlades = null, acAir = [];
+  var acLedMat = new THREE.MeshBasicMaterial({ color: 0x35e06a });
+  var airMats = [];
+  for (var ai = 0; ai < 16; ai++) airMats.push(new THREE.MeshBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0, depthWrite: false }));
 
   // x = length, y = width (front wall at y = 0), z = height.
   function box(parent, x, y, z, w, d, h, material) {
@@ -715,13 +722,35 @@
 
     // Air conditioner: indoor unit in the center of the left wall
     var acY = 0.2 + (W - 0.2) / 2 - 0.45, acZ = zt - 0.5;
-    box(room, 0.15, acY, acZ + 0.06, 0.2, 0.9, 0.24, C.white);
-    box(room, 0.15, acY + 0.02, acZ, 0.18, 0.86, 0.06, C.lgrey);
-    box(room, 0.35, acY + 0.74, acZ + 0.17, 0.002, 0.08, 0.04, C.lgrey);
+    box(room, 0.15, acY, acZ + 0.06, 0.2, 0.9, 0.24, C.white).userData.ac = true;
+    box(room, 0.15, acY + 0.02, acZ, 0.18, 0.86, 0.06, C.lgrey).userData.ac = true;
+    box(room, 0.35, acY + 0.74, acZ + 0.17, 0.002, 0.08, 0.04, C.lgrey).userData.ac = true;
+    box(room, 0.352, acY + 0.76, acZ + 0.185, 0.002, 0.012, 0.012, acLedMat);
+    // Flap on a hinge under the front edge: it swings out when the unit is on
+    acFlap = new THREE.Group();
+    acFlap.position.set(0.335, acZ + 0.058, -(acY + 0.45));
+    acFlap.rotation.z = acPow;
+    room.add(acFlap);
+    var flap = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.056, 0.84), mat(C.white));
+    flap.position.y = -0.028;
+    flap.userData.ac = true;
+    acFlap.add(flap);
+    // Cold air: light blue streaks that move out and down from the flap and fade
+    acAir = airMats.map(function (am, i) {
+      var st = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.004, 0.03), am);
+      st.rotation.z = -0.6;
+      st.userData.ph = (i * 0.618) % 1;
+      st.userData.z = -(acY + 0.07 + ((i * 7) % 16) / 15 * 0.76);
+      st.userData.h = acZ + 0.02;
+      st.raycast = function () {};
+      st.visible = false;
+      room.add(st);
+      return st;
+    });
 
     // Air conditioner: outdoor unit on the outside of the back wall, above the left window
     (function (ox, oy, oz) {
-      box(room, ox, oy, oz + 0.05, 0.8, 0.3, 0.55, C.white);
+      box(room, ox, oy, oz + 0.05, 0.8, 0.3, 0.55, C.white).userData.ac = true;
       box(room, ox + 0.1, oy + 0.02, oz, 0.05, 0.26, 0.05, C.grey);
       box(room, ox + 0.65, oy + 0.02, oz, 0.05, 0.26, 0.05, C.grey);
       box(room, ox + 0.1, oy - 0.2, oz - 0.04, 0.05, 0.5, 0.04, C.grey);
@@ -731,10 +760,23 @@
         var m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, t, 40), mat(c));
         m.rotation.x = Math.PI / 2;
         m.position.set(ox + 0.52, oz + 0.325, -(oy + y + t / 2));
+        m.userData.ac = true;
         room.add(m);
       }
       disc(0.22, 0.005, 0.305, C.fan);
       disc(0.04, 0.004, 0.31, C.white);
+      acBlades = new THREE.Group();
+      acBlades.position.set(ox + 0.52, oz + 0.325, -(oy + 0.317));
+      room.add(acBlades);
+      for (var bi = 0; bi < 3; bi++) {
+        var ba = new THREE.Group();
+        ba.rotation.z = bi * Math.PI * 2 / 3;
+        acBlades.add(ba);
+        var bl = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.075, 0.004), mat(C.lgrey));
+        bl.position.x = 0.115;
+        bl.userData.ac = true;
+        ba.add(bl);
+      }
     })(0.2 + SEG / 2 - 0.4, W + 0.35, zt - 0.75);
 
     // Air conditioner pipe: white cover from the indoor unit along the left wall, through the back wall,
@@ -829,6 +871,11 @@
   }
   bTheme.onclick = function () { setTheme(!dark); };
   themeText();
+  var bAc = el('tAc'), bFan = el('tFan');
+  function setAc(v) { acOn = v; acLedMat.color.set(v ? 0x35e06a : 0x777777); sw(bAc, v, S('Air conditioner', 'ម៉ាស៊ីនត្រជាក់')); }
+  function setFan(v) { fanOn = v; sw(bFan, v, S('Fan', 'កង្ហារ')); }
+  bAc.onclick = function () { setAc(!acOn); };
+  bFan.onclick = function () { setFan(!fanOn); };
   var bCurt = el('tCurt');
   function curtText() { sw(bCurt, curtAll, S('Curtains open', 'បើកវាំងនន')); }
   bCurt.onclick = function () {
@@ -1105,12 +1152,12 @@
     el('lBeam').textContent = S('Beams', 'ធ្នឹម');
     el('cReset').textContent = S('Reset colors', 'ត្រឡប់ទៅពណ៌ដើម');
     sideText();
-    el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan to turn it on or off. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ ចុចលើកង្ហារ ដើម្បីបើក ឬបិទ។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
+    el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan or the air conditioner to turn it on or off. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ ចុចលើកង្ហារ ឬម៉ាស៊ីនត្រជាក់ ដើម្បីបើក ឬបិទ។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
     Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
       var c = CATS[b.getAttribute('data-c')];
       b.textContent = S(c[0], c[1]);
     });
-    setSpin(controls.autoRotate); setDoor(doorOpen); setLight(lightMode); sizeBtnText(); curtText(); themeText();
+    setSpin(controls.autoRotate); setDoor(doorOpen); setLight(lightMode); sizeBtnText(); curtText(); themeText(); setAc(acOn); setFan(fanOn);
     build();
     setRoof(roof.visible); setFront(front.visible);
     showPanels();
@@ -1169,6 +1216,7 @@
       if (o.userData.cur) return { cur: o.userData.cur };
       if (o.userData.wd) return { wd: o.userData.wd };
       if (o.userData.fan) return 'fan';
+      if (o.userData.ac) return 'ac';
       return o.userData.win || null;
     }
     return null;
@@ -1181,7 +1229,8 @@
     if (moved >= 6) return;
     var t = pick(e);
     if (t === 'door') setDoor(!doorOpen);
-    else if (t === 'fan') fanOn = !fanOn;
+    else if (t === 'fan') setFan(!fanOn);
+    else if (t === 'ac') setAc(!acOn);
     else if (t && t.cur) t.cur.open = !t.cur.open;
     else if (t && t.wd) wardOpen[t.wd.i] = !wardOpen[t.wd.i];
     else if (t) {
@@ -1237,6 +1286,8 @@
   build();
   fit();
   setLight(0);
+  setAc(true);
+  setFan(true);
   go('out');
   (function loop() {
     requestAnimationFrame(loop);
@@ -1257,6 +1308,17 @@
     fanT += fanSpeed * 0.016;
     fanBlades.rotation.x += fanSpeed;
     fanOsc.rotation.y = -0.35 + Math.sin(fanT) * 0.5;
+    acPow += ((acOn ? 1 : 0) - acPow) * 0.05;
+    if (Math.abs((acOn ? 1 : 0) - acPow) < 0.002) acPow = acOn ? 1 : 0;
+    acFlap.rotation.z = acPow;
+    acBlades.rotation.z += acPow * 0.42;
+    var airT = performance.now() / 1900;
+    acAir.forEach(function (st) {
+      var t = (airT + st.userData.ph) % 1;
+      st.visible = acPow > 0.02;
+      st.position.set(0.4 + t * 0.78, st.userData.h - t * 0.53, st.userData.z);
+      st.material.opacity = Math.sin(Math.PI * t) * 0.6 * acPow;
+    });
     wardDoors.forEach(function (d) {
       var g = wardOpen[d.i] ? d.dir * Math.PI / 2 : 0;
       d.g.rotation.y += (g - d.g.rotation.y) * 0.12;
