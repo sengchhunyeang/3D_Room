@@ -294,6 +294,45 @@
     });
     note(g, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], text, c, it).userData.extra = extra;
   }
+  // Photo frames on the right wall, above the computer. The photos come from the Image folder:
+  // the build step writes Image/list.json, and up to 4 photos are hung, each frame in the shape of its photo.
+  var photos = [], frameG = null;
+  function drawFrames() {
+    if (!room) return;
+    if (frameG) {
+      room.remove(frameG);
+      frameG.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.dispose(); });
+    }
+    frameG = new THREE.Group();
+    room.add(frameG);
+    var list = photos.filter(Boolean);
+    if (!list.length) list = [{ a: 0.705 }, { a: 0.705 }];
+    var fh = 0.62, gap = 0.14, total = -gap;
+    list.forEach(function (ph) { total += fh * ph.a + gap; });
+    if (total > 2.0) { fh *= 2.0 / total; gap *= 2.0 / total; total = 2.0; }
+    var zf = 0.1 + 1.6, y = 1.5 + total / 2;
+    list.forEach(function (ph) {
+      var fw = fh * ph.a;
+      box(frameG, P.L + 0.025, y - fw - 0.03, zf - 0.03, 0.025, fw + 0.06, fh + 0.06, C.white);
+      var pic = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), ph.tex ? new THREE.MeshBasicMaterial({ map: ph.tex }) : mat(C.sheet));
+      pic.rotation.y = -Math.PI / 2;
+      pic.position.set(P.L + 0.023, zf + fh / 2, -(y - fw / 2));
+      frameG.add(pic);
+      y -= fw + gap;
+    });
+  }
+  if (window.fetch) {
+    fetch('Image/list.json').then(function (r) { return r.ok ? r.json() : []; }).then(function (names) {
+      names.slice(0, 4).forEach(function (n, i) {
+        new THREE.TextureLoader().load('Image/' + encodeURIComponent(n), function (tex) {
+          tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          photos[i] = { tex: tex, a: tex.image.width / tex.image.height };
+          drawFrames();
+        });
+      });
+    }).catch(function () {});
+  }
+
   function setCat(c) {
     cat = c;
     items.forEach(function (it) { it.visible = c === 'all' || it.userData.cat === c; });
@@ -753,6 +792,8 @@
     note(dR, [0.5, W - 0.35, zb + 2.62], S('Wall fan 40 cm', 'កង្ហារជញ្ជាំង 40 cm'), 'other');
     note(dR, [0.22, W - 1.16, 0.62], S('Socket 0.3 m high', 'ព្រីភ្លើង កម្ពស់ 0.3 m'), 'other');
     setCat(cat);
+    frameG = null;
+    drawFrames();
 
     roof.visible = showRoof;
     front.visible = showFront;
@@ -906,6 +947,7 @@
         [S('RGB desktop PC', 'កុំព្យូទ័រ RGB'), '18 x 40 x 40 cm'],
         [S('Gaming chair', 'កៅអីហ្គេមីង'), '50 x 50 cm, ' + high('1.37 m')],
         [S('Gaming chair seat', 'កន្លែងអង្គុយកៅអីហ្គេមីង'), floor('0.49 m')],
+        [S('Photo frames above the table', 'ស៊ុមរូបថតលើតុ'), high('62 cm')],
         [S('Wardrobe, 2 doors', 'ទូខោអាវ ទ្វារ 2'), '1.2 x 0.55 m, ' + high('2.0 m')],
         [S('Dressing table', 'តុសម្អាង'), '1.0 x 0.45 m, ' + high('0.75 m')],
         [S('Dressing table mirror', 'កញ្ចក់តុសម្អាង'), S('68 cm round', 'មូល 68 cm')],
