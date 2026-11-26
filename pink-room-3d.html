@@ -73,7 +73,7 @@
 </div>
 <div id="sizes" class="panel"></div>
 <div id="prices" class="panel"></div>
-<div id="hint">Click the door, a curtain, a window pane, or a wardrobe door to open it. Drag to rotate. Scroll or pinch to zoom.</div>
+<div id="hint">Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan to turn it on or off. Drag to rotate. Scroll or pinch to zoom.</div>
 <div id="err">The 3D view could not load. Check your internet connection and reload the page.</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -161,6 +161,7 @@
   var lightMode = 0;
   var curtains = [], curtAll = false;
   var wardDoors = [], wardOpen = [false, false];
+  var fanOsc = null, fanBlades = null, fanOn = true, fanSpeed = 0, fanT = 0;
 
   // x = length, y = width (front wall at y = 0), z = height.
   function box(parent, x, y, z, w, d, h, material) {
@@ -555,6 +556,53 @@
       room.add(seat);
     })(0.16, 0.25, zb);
 
+    // Wall fan: left wall, in the corner above the head of the bed. It turns left and right, click it to switch it.
+    (function (fy, fz) {
+      var parts = [];
+      parts.push(box(room, 0.16, fy - 0.06, fz - 0.06, 0.02, 0.12, 0.12, C.white));
+      parts.push(box(room, 0.18, fy - 0.015, fz - 0.015, 0.12, 0.03, 0.03, C.white));
+      fanOsc = new THREE.Group();
+      fanOsc.position.set(0.3, fz, -fy);
+      room.add(fanOsc);
+      var head = new THREE.Group();
+      head.rotation.z = -0.25;
+      fanOsc.add(head);
+      function add(parent, geo, material, x) {
+        var q = new THREE.Mesh(geo, material);
+        q.position.x = x;
+        parent.add(q);
+        parts.push(q);
+        return q;
+      }
+      add(head, new THREE.CylinderGeometry(0.055, 0.055, 0.12, 24), mat(C.white), 0.04).rotation.z = Math.PI / 2;
+      [[0.085, 0.19], [0.12, 0.2], [0.155, 0.19]].forEach(function (r) {
+        add(head, new THREE.TorusGeometry(r[1], 0.005, 8, 48), mat(C.grey), r[0]).rotation.y = Math.PI / 2;
+      });
+      for (var i = 0; i < 12; i++) {
+        [[0.157, 0.19, 0], [0.12, 0.05, 0.19], [0.103, 0.05, 0.19]].forEach(function (g) {
+          var sp = new THREE.Group();
+          sp.rotation.x = i * Math.PI / 6;
+          head.add(sp);
+          var q = add(sp, new THREE.BoxGeometry(g[1] ? 0.003 : 0.07, g[1] ? g[1] : 0.003, 0.003), mat(C.grey), g[0]);
+          if (g[2]) { q.geometry = new THREE.BoxGeometry(0.035, 0.003, 0.003); q.position.y = g[2]; } else q.position.y = g[1] / 2;
+        });
+      }
+      add(head, new THREE.CylinderGeometry(0.04, 0.04, 0.006, 24), mat(C.white), 0.158).rotation.z = Math.PI / 2;
+      fanBlades = new THREE.Group();
+      fanBlades.position.x = 0.12;
+      head.add(fanBlades);
+      add(fanBlades, new THREE.CylinderGeometry(0.03, 0.03, 0.04, 20), mat(C.post), 0).rotation.z = Math.PI / 2;
+      for (var k = 0; k < 3; k++) {
+        var arm = new THREE.Group();
+        arm.rotation.x = k * Math.PI * 2 / 3;
+        fanBlades.add(arm);
+        var blade = add(arm, new THREE.BoxGeometry(0.006, 0.15, 0.08), mat(C.post), 0);
+        blade.position.y = 0.1;
+        blade.rotation.y = 0.4;
+      }
+      parts.forEach(function (q) { q.userData.fan = true; });
+    })(W - 0.35, zb + 2.3);
+
     // Air conditioner: indoor unit in the center of the left wall
     var acY = 0.2 + (W - 0.2) / 2 - 0.45, acZ = zt - 0.5;
     box(room, 0.15, acY, acZ + 0.06, 0.2, 0.9, 0.24, C.white);
@@ -619,6 +667,7 @@
     note(dR, [0.42, acY + 0.45, acZ - 0.1], S('Air conditioner 90 x 30 x 20 cm', 'ម៉ាស៊ីនត្រជាក់ 90 x 30 x 20 cm'), 'other');
     note(dR, [0.2 + SEG / 2, W + 0.75, zt - 0.05], S('Outside unit 80 x 55 x 30 cm', 'ម៉ាស៊ីនខាងក្រៅ 80 x 55 x 30 cm'), 'other');
     note(dT, [cx, oy1 + 0.2, zr - 0.06], S('Ceiling frame 40 cm wide', 'ស៊ុមពិដាន ទទឹង 40 cm'), 'other');
+    note(dR, [0.5, W - 0.35, zb + 2.62], S('Wall fan 40 cm', 'កង្ហារជញ្ជាំង 40 cm'), 'other');
     note(dR, [0.22, W - 1.16, 0.62], S('Socket 0.3 m high', 'ព្រីភ្លើង កម្ពស់ 0.3 m'), 'other');
     setCat(cat);
 
@@ -742,6 +791,10 @@
         [S('Inside unit above floor', 'ម៉ាស៊ីនខាងក្នុងពីកម្រាល'), m(H - 0.5)],
         [S('Outside unit', 'ម៉ាស៊ីនខាងក្រៅ'), '80 x 55 x 30 cm']
       ]],
+      [S('Wall fan', 'កង្ហារជញ្ជាំង'), [
+        [S('Size', 'ទំហំ'), S('40 cm round (16 inch)', 'មូល 40 cm (16 អ៊ីញ)')],
+        [S('Center above floor', 'កណ្ដាលកង្ហារពីកម្រាល'), '2.3 m']
+      ]],
       [S('Sockets (3)', 'ព្រីភ្លើង (3)'), [
         [S('Plate', 'ផ្ទៃព្រី'), '8.6 x 8.6 cm'],
         [S('Bed and table sockets', 'ព្រីក្បែរគ្រែ និងតុ'), floor('0.3 m')],
@@ -818,7 +871,8 @@
       [S('Electric', 'អគ្គិសនី'), [
         ['socket', S('Socket', 'ព្រីភ្លើង'), 3, unit, 12000],
         ['switch', S('Light switch', 'កុងតាក់ភ្លើង'), 2, unit, 8000],
-        ['wire', S('Electric wire', 'ខ្សែភ្លើង'), 50, 'm', 1500]
+        ['wire', S('Electric wire', 'ខ្សែភ្លើង'), 50, 'm', 1500],
+        ['wfan', S('Wall fan, 16 inch', 'កង្ហារជញ្ជាំង 16 អ៊ីញ'), 1, unit, 100000]
       ]],
       [S('Air conditioner', 'ម៉ាស៊ីនត្រជាក់'), [
         ['ac', S('Air conditioner 1 HP, with install', 'ម៉ាស៊ីនត្រជាក់ 1 សេះ រួមដំឡើង'), 1, set, 1400000]
@@ -900,7 +954,7 @@
     el('vCeil').textContent = S('Ceiling view', 'មើលពិដាន');
     el('vTop').textContent = S('Top view', 'មើលពីលើ');
     el('tLang').textContent = S('ភាសាខ្មែរ', 'English');
-    el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
+    el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Click the fan to turn it on or off. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ ចុចលើកង្ហារ ដើម្បីបើក ឬបិទ។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
     Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
       var c = CATS[b.getAttribute('data-c')];
       b.textContent = S(c[0], c[1]);
@@ -963,6 +1017,7 @@
       if (doorParts.indexOf(o) >= 0) return 'door';
       if (o.userData.cur) return { cur: o.userData.cur };
       if (o.userData.wd) return { wd: o.userData.wd };
+      if (o.userData.fan) return 'fan';
       return o.userData.win || null;
     }
     return null;
@@ -975,6 +1030,7 @@
     if (moved >= 6) return;
     var t = pick(e);
     if (t === 'door') setDoor(!doorOpen);
+    else if (t === 'fan') fanOn = !fanOn;
     else if (t && t.cur) t.cur.open = !t.cur.open;
     else if (t && t.wd) wardOpen[t.wd.i] = !wardOpen[t.wd.i];
     else if (t) {
@@ -1012,6 +1068,11 @@
         if (Math.abs(g - s.g.position.x) < 0.001) s.g.position.x = g;
       });
     });
+    fanSpeed += ((fanOn ? 0.5 : 0) - fanSpeed) * 0.03;
+    if (fanSpeed < 0.0005) fanSpeed = 0;
+    fanT += fanSpeed * 0.016;
+    fanBlades.rotation.x += fanSpeed;
+    fanOsc.rotation.y = -0.35 + Math.sin(fanT) * 0.5;
     wardDoors.forEach(function (d) {
       var g = wardOpen[d.i] ? d.dir * Math.PI / 2 : 0;
       d.g.rotation.y += (g - d.g.rotation.y) * 0.12;
