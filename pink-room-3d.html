@@ -73,7 +73,7 @@
 </div>
 <div id="sizes" class="panel"></div>
 <div id="prices" class="panel"></div>
-<div id="hint">Click the door, a curtain, or a window pane to open it. Drag to rotate. Scroll or pinch to zoom.</div>
+<div id="hint">Click the door, a curtain, a window pane, or a wardrobe door to open it. Drag to rotate. Scroll or pinch to zoom.</div>
 <div id="err">The 3D view could not load. Check your internet connection and reload the page.</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -160,6 +160,7 @@
   var doorPivot = null, doorParts = [], doorOpen = false, doorAngle = 0, wins = [];
   var lightMode = 0;
   var curtains = [], curtAll = false;
+  var wardDoors = [], wardOpen = [false, false];
 
   // x = length, y = width (front wall at y = 0), z = height.
   function box(parent, x, y, z, w, d, h, material) {
@@ -484,11 +485,38 @@
     var wdx = X2 + DOOR.x0 - 1.25;
     (function (ox, oy, oz) {
       var D = 0xfbe3ec;
-      box(room, ox, oy, oz, 1.2, 0.55, 2.0, C.wood);
-      box(room, ox + 0.02, oy + 0.55, oz + 0.1, 0.575, 0.02, 1.88, D);
-      box(room, ox + 0.605, oy + 0.55, oz + 0.1, 0.575, 0.02, 1.88, D);
-      box(room, ox + 0.55, oy + 0.57, oz + 0.9, 0.02, 0.025, 0.25, C.grey);
-      box(room, ox + 0.63, oy + 0.57, oz + 0.9, 0.02, 0.025, 0.25, C.grey);
+      // Hollow body: back, sides, top, base, shelf
+      box(room, ox, oy, oz, 1.2, 0.02, 2.0, C.wood);
+      box(room, ox, oy + 0.02, oz, 0.02, 0.53, 2.0, C.wood);
+      box(room, ox + 1.18, oy + 0.02, oz, 0.02, 0.53, 2.0, C.wood);
+      box(room, ox + 0.02, oy + 0.02, oz + 1.98, 1.16, 0.53, 0.02, C.wood);
+      box(room, ox + 0.02, oy + 0.02, oz, 1.16, 0.53, 0.1, C.wood);
+      box(room, ox + 0.02, oy + 0.02, oz + 1.68, 1.16, 0.5, 0.02, C.wood);
+      // Inside: hanging rod, clothes, folded clothes
+      box(room, ox + 0.02, oy + 0.27, oz + 1.6, 1.16, 0.02, 0.02, C.grey);
+      [[0.1, 0.75, C.blanket], [0.2, 1.0, C.white], [0.3, 0.7, C.post], [0.4, 1.1, C.pink], [0.52, 0.8, C.red],
+       [0.7, 0.65, C.screen], [0.8, 0.9, C.sheet], [0.9, 0.7, C.blanket], [1.02, 1.0, C.beam]].forEach(function (c) {
+        box(room, ox + c[0], oy + 0.08, oz + 1.59 - c[1], 0.05, 0.4, c[1], c[2]);
+      });
+      box(room, ox + 0.1, oy + 0.1, oz + 1.7, 0.35, 0.32, 0.06, C.pink);
+      box(room, ox + 0.1, oy + 0.1, oz + 1.76, 0.35, 0.32, 0.06, C.white);
+      box(room, ox + 0.65, oy + 0.1, oz + 1.7, 0.35, 0.32, 0.08, C.post);
+      box(room, ox + 0.7, oy + 0.12, oz + 0.1, 0.4, 0.3, 0.2, C.lgrey);
+      // 2 doors on hinges at the outer edges, they swing into the room
+      wardDoors = [];
+      [[ox + 0.02, 1], [ox + 1.18, -1]].forEach(function (e, i) {
+        var g = new THREE.Group();
+        g.position.set(e[0], 0, -(oy + 0.56));
+        g.rotation.y = wardOpen[i] ? e[1] * Math.PI / 2 : 0;
+        room.add(g);
+        var me = { g: g, dir: e[1], i: i };
+        var leaf = new THREE.Mesh(new THREE.BoxGeometry(0.575, 1.88, 0.02), mat(D));
+        leaf.position.set(e[1] * 0.2875, oz + 1.04, 0);
+        var handle = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.25, 0.025), mat(C.grey));
+        handle.position.set(e[1] * 0.54, oz + 1.025, -0.0225);
+        [leaf, handle].forEach(function (m) { m.userData.wd = me; g.add(m); });
+        wardDoors.push(me);
+      });
     })(wdx, 0.2, zb);
 
     // Dressing table: left wall, under the air conditioner. Drawers, round mirror with light bulbs, stool.
@@ -872,7 +900,7 @@
     el('vCeil').textContent = S('Ceiling view', 'មើលពិដាន');
     el('vTop').textContent = S('Top view', 'មើលពីលើ');
     el('tLang').textContent = S('ភាសាខ្មែរ', 'English');
-    el('hint').textContent = S('Click the door, a curtain, or a window pane to open it. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន ឬបន្ទះបង្អួចដើម្បីបើក។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
+    el('hint').textContent = S('Click the door, a curtain, a window pane, or a wardrobe door to open it. Drag to rotate. Scroll or pinch to zoom.', 'ចុចលើទ្វារ វាំងនន បន្ទះបង្អួច ឬទ្វារទូខោអាវ ដើម្បីបើក។ អូសដើម្បីបង្វិល។ រមូរដើម្បីពង្រីក។');
     Array.prototype.forEach.call(document.querySelectorAll('#cats button'), function (b) {
       var c = CATS[b.getAttribute('data-c')];
       b.textContent = S(c[0], c[1]);
@@ -934,6 +962,7 @@
       if (o.isLineSegments || !shown(o)) continue;
       if (doorParts.indexOf(o) >= 0) return 'door';
       if (o.userData.cur) return { cur: o.userData.cur };
+      if (o.userData.wd) return { wd: o.userData.wd };
       return o.userData.win || null;
     }
     return null;
@@ -947,6 +976,7 @@
     var t = pick(e);
     if (t === 'door') setDoor(!doorOpen);
     else if (t && t.cur) t.cur.open = !t.cur.open;
+    else if (t && t.wd) wardOpen[t.wd.i] = !wardOpen[t.wd.i];
     else if (t) {
       var op = !t.open;
       t.win.sashes.forEach(function (s) { s.open = false; });
@@ -981,6 +1011,11 @@
         s.g.position.x += (g - s.g.position.x) * 0.12;
         if (Math.abs(g - s.g.position.x) < 0.001) s.g.position.x = g;
       });
+    });
+    wardDoors.forEach(function (d) {
+      var g = wardOpen[d.i] ? d.dir * Math.PI / 2 : 0;
+      d.g.rotation.y += (g - d.g.rotation.y) * 0.12;
+      if (Math.abs(g - d.g.rotation.y) < 0.001) d.g.rotation.y = g;
     });
     curtains.forEach(function (c) {
       c.panels.forEach(function (g) {
