@@ -33,15 +33,13 @@
 
   #hint { position: absolute; left: 12px; bottom: 10px; right: 12px; font-size: 12px; color: #44505c; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #err { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #1f2933; }
-  @media (prefers-color-scheme: dark) {
-    html, body { background: #1b1f24; }
-    button { background: #2a3038; color: #eef1f4; border-color: #46505c; }
-    button:hover { background: #343b45; }
-    button.on, button.on:hover { background: #eef1f4; color: #1b1f24; border-color: #eef1f4; }
-    .panel { background: rgba(34,39,46,0.95); border-color: #46505c; color: #eef1f4; }
-    #hint { color: #b6c0ca; }
-    #err { color: #eef1f4; }
-  }
+  html.dark, html.dark body { background: #1b1f24; }
+  html.dark button { background: #2a3038; color: #eef1f4; border-color: #46505c; }
+  html.dark button:hover { background: #343b45; }
+  html.dark button.on, html.dark button.on:hover { background: #eef1f4; color: #1b1f24; border-color: #eef1f4; }
+  html.dark .panel { background: rgba(34,39,46,0.95); border-color: #46505c; color: #eef1f4; }
+  html.dark #hint { color: #b6c0ca; }
+  html.dark #err { color: #eef1f4; }
 </style>
 </head>
 <body>
@@ -64,6 +62,7 @@
   <button id="tList">Size list</button>
   <button id="tPrice">Price list</button>
   <button id="tLang">ភាសាខ្មែរ</button>
+  <button id="tTheme">Dark mode</button>
   <div id="cats">
     <button data-c="all" class="on">All sizes</button>
     <button data-c="room">Room</button>
@@ -83,7 +82,10 @@
   if (!window.THREE || !THREE.OrbitControls) { document.getElementById('err').style.display = 'flex'; return; }
 
   var holder = document.getElementById('view');
-  var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  // Dark or light mode: the saved choice, or the system setting the first time
+  var dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  try { var savedTheme = localStorage.getItem('roomTheme'); if (savedTheme) dark = savedTheme === 'dark'; } catch (e) {}
+  document.documentElement.classList.toggle('dark', dark);
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(dark ? 0x1b1f24 : 0xe9edf1);
   var camera = new THREE.PerspectiveCamera(50, 1, 0.05, 300);
@@ -133,6 +135,7 @@
   // One-way glass: black from outside, clear from inside
   var glassOut = new THREE.MeshLambertMaterial({ color: 0x0c0e11 });
   var glassIn = new THREE.MeshBasicMaterial({ color: 0x30404c, transparent: true, opacity: 0.15, depthWrite: false });
+  var mirrorMat = new THREE.MeshBasicMaterial({ color: 0xd3e4ec });
 
   var canvases = {};
   function tileCanvas(tile, grout) {
@@ -477,6 +480,53 @@
       box(room, ox + 0.1, oy + 0.49, oz + 0.65, 0.26, 0.08, 0.03, K);
     })(L - 1.3, 1.25, zb);
 
+    // Wardrobe: front wall, between the window and the door. Wood body, 2 light pink doors.
+    var wdx = X2 + DOOR.x0 - 1.25;
+    (function (ox, oy, oz) {
+      var D = 0xfbe3ec;
+      box(room, ox, oy, oz, 1.2, 0.55, 2.0, C.wood);
+      box(room, ox + 0.02, oy + 0.55, oz + 0.1, 0.575, 0.02, 1.88, D);
+      box(room, ox + 0.605, oy + 0.55, oz + 0.1, 0.575, 0.02, 1.88, D);
+      box(room, ox + 0.55, oy + 0.57, oz + 0.9, 0.02, 0.025, 0.25, C.grey);
+      box(room, ox + 0.63, oy + 0.57, oz + 0.9, 0.02, 0.025, 0.25, C.grey);
+    })(wdx, 0.2, zb);
+
+    // Dressing table: left wall, under the air conditioner. Drawers, round mirror with light bulbs, stool.
+    (function (ox, oy, oz) {
+      box(room, ox, oy, oz + 0.71, 0.45, 1.0, 0.04, C.wood);
+      [0, 0.72].forEach(function (dy) {
+        box(room, ox, oy + dy, oz, 0.43, 0.28, 0.71, C.white);
+        [0.12, 0.36, 0.59].forEach(function (z) { box(room, ox + 0.43, oy + dy + 0.1, oz + z, 0.012, 0.08, 0.015, C.grey); });
+        [0.24, 0.475].forEach(function (z) { box(room, ox + 0.43, oy + dy + 0.01, oz + z, 0.002, 0.26, 0.006, C.lgrey); });
+      });
+      box(room, ox, oy + 0.28, oz + 0.59, 0.43, 0.44, 0.12, C.white);
+      box(room, ox + 0.43, oy + 0.46, oz + 0.645, 0.012, 0.08, 0.015, C.grey);
+      var mz = oz + 1.3, my = oy + 0.5;
+      function disc(r, t, x, material) {
+        var d = new THREE.Mesh(new THREE.CylinderGeometry(r, r, t, 40), material);
+        d.rotation.z = Math.PI / 2;
+        d.position.set(x + t / 2, mz, -my);
+        room.add(d);
+      }
+      disc(0.34, 0.02, ox, mat(C.white));
+      disc(0.29, 0.004, ox + 0.02, mirrorMat);
+      for (var i = 0; i < 10; i++) {
+        var a = i * Math.PI / 5;
+        var bulb = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 10), lightMat);
+        bulb.position.set(ox + 0.025, mz + Math.sin(a) * 0.315, -(my + Math.cos(a) * 0.315));
+        room.add(bulb);
+      }
+      box(room, ox + 0.08, oy + 0.15, oz + 0.75, 0.05, 0.05, 0.11, C.blanket);
+      box(room, ox + 0.1, oy + 0.24, oz + 0.75, 0.04, 0.04, 0.07, C.post);
+      box(room, ox + 0.1, oy + 0.78, oz + 0.75, 0.12, 0.1, 0.05, C.pink);
+      var base = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 28), mat(C.white));
+      base.position.set(ox + 0.72, oz + 0.18, -my);
+      room.add(base);
+      var seat = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 28), mat(C.blanket));
+      seat.position.set(ox + 0.72, oz + 0.4, -my);
+      room.add(seat);
+    })(0.16, 0.25, zb);
+
     // Air conditioner: indoor unit in the center of the left wall
     var acY = 0.2 + (W - 0.2) / 2 - 0.45, acZ = zt - 0.5;
     box(room, 0.15, acY, acZ + 0.06, 0.2, 0.9, 0.24, C.white);
@@ -528,6 +578,9 @@
     dim(dR, [2.26, W - 1.0, zb + 0.5], [2.26, W, zb + 0.5], '1.0 m', 'furn');
     dim(dR, [L - 0.6, 0.84, zb + 0.77], [L, 0.84, zb + 0.77], '0.6 m', 'furn');
     note(dR, [L - 1.3, 1.5, zb + 1.5], S('Gaming chair 1.37 m high', 'កៅអីហ្គេមីង កម្ពស់ 1.37 m'), 'furn');
+    dim(dR, [wdx, 0.8, zb + 2.04], [wdx + 1.2, 0.8, zb + 2.04], S('Wardrobe 1.2 m', 'ទូខោអាវ 1.2 m'), 'furn');
+    dim(dR, [wdx - 0.04, 0.8, zb], [wdx - 0.04, 0.8, zb + 2.0], '2.0 m', 'furn');
+    dim(dR, [0.66, 0.25, zb + 0.77], [0.66, 1.25, zb + 0.77], S('Dressing table 1.0 m', 'តុសម្អាង 1.0 m'), 'furn');
     dim(dR, [L / 2 + 0.1, W - 0.05, zb], [L / 2 + 0.1, W - 0.05, zc], S('Floor to ceiling ', 'កម្រាលដល់ពិដាន ') + m(zc - zb), 'room');
     note(dR, [0.1, -0.12, zb + 1.5], S('Pillar 20 x 20 cm', 'សសរ 20 x 20 cm'), 'room');
     note(dT, [L * 0.3, -0.08, zt + 0.15], S('Beam 20 x 30 cm', 'ធ្នឹម 20 x 30 cm'), 'room');
@@ -552,6 +605,18 @@
   function setFront(v) { front.visible = v; bFront.textContent = v ? S('Hide front wall', 'លាក់ជញ្ជាំងមុខ') : S('Show front wall', 'បង្ហាញជញ្ជាំងមុខ'); }
   function setSpin(v) { controls.autoRotate = v; bSpin.textContent = v ? S('360 spin: on', 'បង្វិល 360°៖ បើក') : S('360 spin: off', 'បង្វិល 360°៖ បិទ'); }
   function setDoor(v) { doorOpen = v; bDoor.textContent = v ? S('Close door', 'បិទទ្វារ') : S('Open door', 'បើកទ្វារ'); }
+  var bTheme = el('tTheme');
+  function themeText() { bTheme.textContent = dark ? S('Light mode', 'របៀបភ្លឺ') : S('Dark mode', 'របៀបងងឹត'); }
+  function setTheme(v) {
+    dark = v;
+    document.documentElement.classList.toggle('dark', v);
+    scene.background.set(v ? 0x1b1f24 : 0xe9edf1);
+    ground.material.color.set(v ? 0x2a2f36 : 0xcfd5da);
+    try { localStorage.setItem('roomTheme', v ? 'dark' : 'light'); } catch (e) {}
+    themeText();
+  }
+  bTheme.onclick = function () { setTheme(!dark); };
+  themeText();
   var bCurt = el('tCurt');
   function curtText() { bCurt.textContent = curtAll ? S('Close curtains', 'បិទវាំងនន') : S('Open curtains', 'បើកវាំងនន'); }
   bCurt.onclick = function () {
@@ -661,7 +726,11 @@
         [S('Monitor, 32 inch', 'អេក្រង់ 32 អ៊ីញ'), '72 x 42 cm'],
         [S('RGB desktop PC', 'កុំព្យូទ័រ RGB'), '18 x 40 x 40 cm'],
         [S('Gaming chair', 'កៅអីហ្គេមីង'), '50 x 50 cm, ' + high('1.37 m')],
-        [S('Gaming chair seat', 'កន្លែងអង្គុយកៅអីហ្គេមីង'), floor('0.49 m')]
+        [S('Gaming chair seat', 'កន្លែងអង្គុយកៅអីហ្គេមីង'), floor('0.49 m')],
+        [S('Wardrobe, 2 doors', 'ទូខោអាវ ទ្វារ 2'), '1.2 x 0.55 m, ' + high('2.0 m')],
+        [S('Dressing table', 'តុសម្អាង'), '1.0 x 0.45 m, ' + high('0.75 m')],
+        [S('Dressing table mirror', 'កញ្ចក់តុសម្អាង'), S('68 cm round', 'មូល 68 cm')],
+        [S('Dressing table stool', 'កៅអីតុសម្អាង'), S('34 cm round, ', 'មូល 34 cm ') + high('0.44 m')]
       ]]
     ];
   }
@@ -731,7 +800,9 @@
         ['table', S('Table', 'តុ'), 1, pc, 200000],
         ['gchair', S('Gaming chair', 'កៅអីហ្គេមីង'), 1, pc, 360000],
         ['rgbpc', S('RGB desktop PC', 'កុំព្យូទ័រ RGB'), 1, set, 2800000],
-        ['mon32', S('Monitor, 32 inch', 'អេក្រង់ 32 អ៊ីញ'), 1, pc, 800000]
+        ['mon32', S('Monitor, 32 inch', 'អេក្រង់ 32 អ៊ីញ'), 1, pc, 800000],
+        ['wardrobe', S('Wardrobe, 2 doors', 'ទូខោអាវ ទ្វារ 2'), 1, pc, 480000],
+        ['vanity', S('Dressing table with mirror and stool', 'តុសម្អាង មានកញ្ចក់ និងកៅអី'), 1, set, 320000]
       ]]
     ];
   }
@@ -806,7 +877,7 @@
       var c = CATS[b.getAttribute('data-c')];
       b.textContent = S(c[0], c[1]);
     });
-    setSpin(controls.autoRotate); setDoor(doorOpen); setLight(lightMode); sizeBtnText(); curtText();
+    setSpin(controls.autoRotate); setDoor(doorOpen); setLight(lightMode); sizeBtnText(); curtText(); themeText();
     build();
     setRoof(roof.visible); setFront(front.visible);
     showPanels();
