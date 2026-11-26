@@ -698,6 +698,18 @@
       disc(0.04, 0.004, 0.31, C.white);
     })(0.2 + SEG / 2 - 0.4, W + 0.35, zt - 0.75);
 
+    // Air conditioner pipe: white cover from the indoor unit along the left wall, through the back wall,
+    // then outside to the outdoor unit. Grey drain hose down the outside wall. Black power cable to the socket.
+    (function (pz, ux) {
+      box(room, 0.15, acY + 0.9, pz, 0.07, W - acY - 0.9, 0.06, C.white);
+      box(room, 0.2, W - 0.07, pz, 0.07, 0.28, 0.06, C.white);
+      box(room, 0.2, W + 0.15, pz, ux - 0.11, 0.06, 0.06, C.white);
+      box(room, ux - 0.09, W + 0.15, pz, 0.06, 0.32, 0.06, C.white);
+      box(room, ux - 0.03, W + 0.41, pz, 0.03, 0.06, 0.06, C.grey);
+      box(room, 0.275, W + 0.15, 0.1, 0.025, 0.025, pz - 0.1, C.lgrey);
+      box(room, 0.15, acY - 0.114, zt - 0.36, 0.012, 0.114, 0.012, C.black);
+    })(acZ + 0.12, 0.2 + SEG / 2 - 0.4);
+
     // 3 sockets: next to the bed, next to the table, next to the air conditioner
     function socketX(x, y, z, dir) {
       box(room, dir > 0 ? x : x - 0.01, y, z, 0.01, 0.086, 0.086, C.white);
@@ -873,7 +885,9 @@
       [S('Air conditioner', 'ម៉ាស៊ីនត្រជាក់'), [
         [S('Inside unit', 'ម៉ាស៊ីនខាងក្នុង'), '90 x 30 x 20 cm'],
         [S('Inside unit above floor', 'ម៉ាស៊ីនខាងក្នុងពីកម្រាល'), m(H - 0.5)],
-        [S('Outside unit', 'ម៉ាស៊ីនខាងក្រៅ'), '80 x 55 x 30 cm']
+        [S('Outside unit', 'ម៉ាស៊ីនខាងក្រៅ'), '80 x 55 x 30 cm'],
+        [S('Pipe cover, inside to outside', 'ប្រអប់បំពង់ ពីក្នុងទៅក្រៅ'), S('6 x 6 cm, about 2.2 m', '6 x 6 cm ប្រហែល 2.2 m')],
+        [S('Drain hose', 'ទុយោបង្ហូរទឹក'), S('down the back wall', 'ចុះតាមជញ្ជាំងក្រោយ')]
       ]],
       [S('Wall fan', 'កង្ហារជញ្ជាំង'), [
         [S('Size', 'ទំហំ'), S('40 cm round (16 inch)', 'មូល 40 cm (16 អ៊ីញ)')],
